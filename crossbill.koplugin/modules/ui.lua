@@ -65,6 +65,12 @@ function UI.showAutosyncToggled(enabled)
 	UI.showMessage(enabled and _("Auto-sync enabled") or _("Auto-sync disabled"))
 end
 
+--- Show session tracking status change message
+-- @param enabled boolean Whether session tracking is now enabled
+function UI.showSessionTrackingToggled(enabled)
+	UI.showMessage(enabled and _("Session tracking enabled") or _("Session tracking disabled"))
+end
+
 --- Show server configuration dialog
 -- @param settings Settings instance
 -- @param on_save function Callback when settings are saved
@@ -127,6 +133,8 @@ end
 --   - on_configure: function() Called when configure is triggered
 --   - is_autosync_enabled: function() Returns autosync state
 --   - on_toggle_autosync: function() Called when autosync is toggled
+--   - is_session_tracking_enabled: function() Returns session tracking state
+--   - on_toggle_session_tracking: function() Called when session tracking is toggled
 -- @return table Menu item table for KOReader
 function UI.buildMenuItems(handlers)
 	return {
@@ -145,6 +153,11 @@ function UI.buildMenuItems(handlers)
 				text = _("Auto-sync"),
 				checked_func = handlers.is_autosync_enabled,
 				callback = handlers.on_toggle_autosync,
+			},
+			{
+				text = _("Track Reading Sessions"),
+				checked_func = handlers.is_session_tracking_enabled,
+				callback = handlers.on_toggle_session_tracking,
 			},
 		},
 	}

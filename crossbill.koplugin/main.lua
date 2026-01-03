@@ -7,6 +7,7 @@ Supports manual sync, auto-sync on suspend/exit, and cover image uploads.
 
 local WidgetContainer = require("ui/widget/container/widgetcontainer")
 local logger = require("logger")
+local DataStorage = require("datastorage")
 
 local Settings = require("modules/settings")
 local Network = require("modules/network")
@@ -14,6 +15,7 @@ local Auth = require("modules/auth")
 local ApiClient = require("modules/api_client")
 local HighlightExtractor = require("modules/highlight_extractor")
 local BookMetadata = require("modules/book_metadata")
+local SessionTracker = require("modules/sessiontracker")
 local UI = require("modules/ui")
 
 local CrossbillSync = WidgetContainer:extend({
@@ -31,6 +33,10 @@ function CrossbillSync:init()
 
 	-- Initialize API client with settings and auth
 	self.api_client = ApiClient:new(self.settings, self.auth)
+
+	-- Initialize session tracker
+	self.session_tracker = SessionTracker:new()
+	self.session_tracker:init(DataStorage:getSettingsDir())
 
 	-- Register menu
 	self.ui.menu:registerToMainMenu(self)
@@ -51,6 +57,21 @@ function CrossbillSync:addToMainMenu(menu_items)
 		on_toggle_autosync = function()
 			local enabled = self.settings:toggleAutosync()
 			UI.showAutosyncToggled(enabled)
+		end,
+		is_session_tracking_enabled = function()
+			return self.settings:isSessionTrackingEnabled()
+		end,
+		on_toggle_session_tracking = function()
+			-- End current session before disabling tracking
+			if self.settings:isSessionTrackingEnabled() and self.session_tracker then
+				self.session_tracker:endSession(self.ui.document, self.ui, "tracking_disabled")
+			end
+			local enabled = self.settings:toggleSessionTracking()
+			UI.showSessionTrackingToggled(enabled)
+			-- Start new session if re-enabled and document is open
+			if enabled and self.ui.document and self.session_tracker then
+				self.session_tracker:startSession(self.ui.document, self.ui)
+			end
 		end,
 	})
 end
@@ -179,16 +200,45 @@ function CrossbillSync:uploadCoverImage(book_id, book_metadata)
 	end
 end
 
--- Event handlers for auto-sync
+-- Event handlers for session tracking and auto-sync
+
+--- Called when document is ready for reading
+function CrossbillSync:onReaderReady()
+	if self.settings:isSessionTrackingEnabled() and self.session_tracker then
+		self.session_tracker:startSession(self.ui.document, self.ui)
+	end
+	return false
+end
+
+--- Called on every page update
+function CrossbillSync:onPageUpdate(pageno)
+	if self.settings:isSessionTrackingEnabled() and self.session_tracker then
+		self.session_tracker:updatePosition(self.ui.document, self.ui, pageno)
+	end
+	return false
+end
+
+--- Called when device resumes from sleep
+function CrossbillSync:onResume()
+	if self.settings:isSessionTrackingEnabled() and self.ui.document and self.session_tracker then
+		self.session_tracker:startSession(self.ui.document, self.ui)
+	end
+	return false
+end
 
 --- Called when document is closed
 function CrossbillSync:onCloseDocument()
-	-- Don't auto-sync on document close to avoid nil document errors
+	if self.settings:isSessionTrackingEnabled() and self.session_tracker then
+		self.session_tracker:endSession(self.ui.document, self.ui, "document_close")
+	end
 	return false
 end
 
 --- Called when device goes to sleep/suspend
 function CrossbillSync:onSuspend()
+	if self.settings:isSessionTrackingEnabled() and self.session_tracker then
+		self.session_tracker:endSession(self.ui.document, self.ui, "suspend")
+	end
 	if self.settings:isAutosyncEnabled() then
 		logger.info("Crossbill: Auto-syncing on suspend")
 		self:syncCurrentBook(true)
@@ -198,6 +248,10 @@ end
 
 --- Called when KOReader exits
 function CrossbillSync:onExit()
+	if self.settings:isSessionTrackingEnabled() and self.session_tracker then
+		self.session_tracker:endSession(self.ui.document, self.ui, "app_exit")
+		self.session_tracker:close()
+	end
 	if self.settings:isAutosyncEnabled() then
 		logger.info("Crossbill: Auto-syncing on exit")
 		self:syncCurrentBook(true)
