@@ -90,6 +90,8 @@ function SessionTracker:close()
 	if self.db then
 		logger.dbg("Crossbill SessionTracker: Closing database")
 		local success, err = pcall(function()
+			-- Checkpoint WAL to ensure all data is written to main file
+			self.db:exec("PRAGMA wal_checkpoint(TRUNCATE);")
 			self.db:close()
 		end)
 		if not success then
@@ -354,6 +356,10 @@ function SessionTracker:endSession(document, ui, reason)
 			"seconds) - reason:",
 			reason
 		)
+		-- Checkpoint WAL to ensure data is written to main file
+		pcall(function()
+			self.db:exec("PRAGMA wal_checkpoint(PASSIVE);")
+		end)
 	else
 		logger.err("Crossbill SessionTracker: Failed to save session:", err)
 	end
