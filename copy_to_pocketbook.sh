@@ -44,6 +44,10 @@ sed -i 's/crossbill_sync/crossbill_test_sync/g' "$TMP_TEST_DIR/crossbill-test.ko
 # Change menu text
 sed -i 's/_("Crossbill Sync")/_("Crossbill Test Sync")/g' "$TMP_TEST_DIR/crossbill-test.koplugin/modules/ui.lua"
 
+# Modify modules/sessiontracker.lua for test version
+# Change database filename to avoid conflicts with production
+sed -i 's/crossbill_sessions\.sqlite3/test_crossbill_sessions.sqlite3/g' "$TMP_TEST_DIR/crossbill-test.koplugin/modules/sessiontracker.lua"
+
 # Copy test plugin to destination
 cp -R "$TMP_TEST_DIR/crossbill-test.koplugin" "$KOREADER_PLUGINS_PATH/"
 
