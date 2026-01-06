@@ -34,8 +34,8 @@ function CrossbillSync:init()
 	-- Initialize API client with settings and auth
 	self.api_client = ApiClient:new(self.settings, self.auth)
 
-	-- Initialize session tracker
-	self.session_tracker = SessionTracker:new()
+	-- Initialize session tracker with settings
+	self.session_tracker = SessionTracker:new(self.settings)
 	self.session_tracker:init(DataStorage:getSettingsDir())
 
 	-- Register menu
@@ -72,6 +72,9 @@ function CrossbillSync:addToMainMenu(menu_items)
 			if enabled and self.ui.document and self.session_tracker then
 				self.session_tracker:startSession(self.ui.document, self.ui)
 			end
+		end,
+		on_configure_min_session_duration = function()
+			UI.showMinSessionDurationDialog(self.settings)
 		end,
 	})
 end

@@ -15,7 +15,6 @@ local SessionTracker = {}
 SessionTracker.__index = SessionTracker
 
 -- Constants
-local MIN_SESSION_DURATION = 60 -- seconds, sessions shorter than this are discarded
 local DB_FILENAME = "crossbill_sessions.sqlite3"
 
 -- Database schema
@@ -47,13 +46,15 @@ CREATE INDEX IF NOT EXISTS idx_sessions_start_time ON sessions(start_time);
 ]]
 
 --- Create a new SessionTracker instance
+-- @param settings Settings instance for accessing configuration
 -- @return SessionTracker instance
-function SessionTracker:new()
+function SessionTracker:new(settings)
 	local instance = setmetatable({}, SessionTracker)
 	instance.db = nil
 	instance.current_session = nil
 	instance.db_path = nil
 	instance._initialized = false
+	instance.settings = settings
 	return instance
 end
 
@@ -325,7 +326,8 @@ function SessionTracker:endSession(document, ui, reason)
 	local duration = end_time - session.start_time
 
 	-- Discard very short sessions
-	if duration < MIN_SESSION_DURATION then
+	local min_duration = self.settings:getMinReadingSessionDuration() or 60
+	if duration < min_duration then
 		logger.dbg("Crossbill SessionTracker: Discarding short session (", duration, "seconds) - reason:", reason)
 		self.current_session = nil
 		return

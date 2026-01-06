@@ -17,6 +17,7 @@ local DEFAULTS = {
 	password = "",
 	autosync_enabled = false,
 	session_tracking_enabled = true,
+	min_reading_session_duration = 60,
 	access_token = nil,
 	refresh_token = nil,
 	token_expires_at = nil,
@@ -137,6 +138,12 @@ end
 -- @return boolean True if session tracking is enabled
 function Settings:isSessionTrackingEnabled()
 	return self:get("session_tracking_enabled") == true
+end
+
+--- Return min_reading_session_time
+-- @return integer for reading session minimum duration
+function Settings:getMinReadingSessionDuration()
+	return self:get("min_reading_session_duration")
 end
 
 --- Toggle session tracking setting
