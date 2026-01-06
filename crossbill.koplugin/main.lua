@@ -171,9 +171,12 @@ function CrossbillSync:doSync(is_autosync)
 		end
 	else
 		-- Upload reading sessions (no highlights for this book)
-		self:uploadReadingSessions()
+		local success, _, book_id = self:uploadReadingSessions()
 
-		-- TODO: Upload cover image
+		-- Upload cover image if book_id was returned
+		if success and book_id then
+			self:uploadCoverImage(book_id, book_metadata)
+		end
 	end
 end
 
@@ -208,15 +211,16 @@ end
 --- Upload unsynced reading sessions to server for the current book
 -- @return boolean Success status
 -- @return number Number of sessions synced (or error message on failure)
+-- @return number|nil book_id from server response (nil on failure or no sessions)
 function CrossbillSync:uploadReadingSessions()
 	if not self.session_tracker or not self.settings:isSessionTrackingEnabled() then
 		logger.dbg("Crossbill: Session tracking not enabled")
-		return true, 0
+		return true, 0, nil
 	end
 
 	if not self.ui.document then
 		logger.dbg("Crossbill: No document available for session sync")
-		return true, 0
+		return true, 0, nil
 	end
 
 	-- Get current book's metadata and hash
@@ -226,7 +230,7 @@ function CrossbillSync:uploadReadingSessions()
 
 	if not doc_path then
 		logger.warn("Crossbill: Cannot get document path for session sync")
-		return false, "No document path"
+		return false, "No document path", nil
 	end
 
 	-- Get book hash using the same method as SessionTracker
@@ -237,7 +241,7 @@ function CrossbillSync:uploadReadingSessions()
 	local sessions = self.session_tracker:getUnsyncedSessionsForBook(book_hash)
 	if #sessions == 0 then
 		logger.dbg("Crossbill: No reading sessions to sync for current book")
-		return true, 0
+		return true, 0, nil
 	end
 
 	logger.info("Crossbill: Found", #sessions, "unsynced reading sessions for current book")
@@ -252,12 +256,12 @@ function CrossbillSync:uploadReadingSessions()
 		self.session_tracker:markSessionsSynced(session_ids)
 
 		logger.info("Crossbill: Synced", #sessions, "reading sessions")
-		return true, #sessions
+		return true, #sessions, response.book_id
 	end
 
 	-- On failure, sessions remain unsynced for retry
 	logger.warn("Crossbill: Failed to sync reading sessions:", err)
-	return false, err
+	return false, err, nil
 end
 
 --- Try to sync reading sessions opportunistically (only if already online)
