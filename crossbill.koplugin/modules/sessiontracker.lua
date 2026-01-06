@@ -10,8 +10,6 @@ local logger = require("logger")
 local SQ3 = require("lua-ljsqlite3/init")
 local Device = require("device")
 local BookMetadata = require("modules/book_metadata")
-local JSON = require("json")
-local empty_array = JSON.decode("[]") or {}
 
 local SessionTracker = {}
 SessionTracker.__index = SessionTracker
@@ -22,19 +20,6 @@ local DB_FILENAME = "crossbill_sessions.sqlite3"
 
 -- Database schema
 local SCHEMA = [[
-CREATE TABLE IF NOT EXISTS books (
-    book_hash TEXT PRIMARY KEY,
-    title TEXT,
-    author TEXT,
-    isbn TEXT,
-    cover TEXT,
-    description TEXT,
-    language TEXT,
-    page_count INTEGER,
-    keywords TEXT,
-    updated_at INTEGER DEFAULT (strftime('%s', 'now'))
-);
-
 CREATE TABLE IF NOT EXISTS sessions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     book_file TEXT NOT NULL,
@@ -57,7 +42,6 @@ CREATE TABLE IF NOT EXISTS sessions (
 );
 
 CREATE INDEX IF NOT EXISTS idx_sessions_book_hash ON sessions(book_hash);
-CREATE INDEX IF NOT EXISTS idx_books_book_hash ON books(book_hash);
 CREATE INDEX IF NOT EXISTS idx_sessions_synced ON sessions(synced);
 CREATE INDEX IF NOT EXISTS idx_sessions_start_time ON sessions(start_time);
 ]]
@@ -244,7 +228,6 @@ function SessionTracker:startSession(document, ui)
 	-- Get book title and author from document properties
 	local book_title = nil
 	local book_author = nil
-	local metadata = nil
 
 	-- Extract full metadata if UI is available
 	if ui then
@@ -253,35 +236,8 @@ function SessionTracker:startSession(document, ui)
 			return meta_extractor:extractBookData()
 		end)
 		if success and book_data then
-			metadata = book_data
 			book_title = book_data.title
 			book_author = book_data.author
-
-						-- Save/Update book metadata in database
-						pcall(function()
-							local keywords = (book_data.keywords and #book_data.keywords > 0) and book_data.keywords or empty_array
-							local keywords_json = JSON.encode(keywords)
-							
-							local stmt = self.db:prepare([[					INSERT OR REPLACE INTO books (
-						book_hash, title, author, isbn, description,
-						language, page_count, keywords, cover, updated_at
-					) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%s', 'now'))
-				]])
-
-				stmt:bind(
-					self:_getBookHash(file_path),
-					book_data.title,
-					book_data.author,
-					book_data.isbn,
-					book_data.description,
-					book_data.language,
-					book_data.page_count,
-					keywords_json,
-					"" -- Cover string (placeholder for now)
-				)
-				stmt:step()
-				stmt:close()
-			end)
 		else
 			logger.warn("Crossbill SessionTracker: Failed to extract book metadata")
 		end
