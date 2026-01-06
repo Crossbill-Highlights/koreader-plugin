@@ -129,20 +129,11 @@ function ApiClient:uploadReadingSessions(sessions)
 	-- Transform sessions to API format
 	local api_sessions = {}
 	for _, session in ipairs(sessions) do
-		local start_time = unixToISO8601(session.start_time)
-		local end_time = unixToISO8601(session.end_time)
-
-		-- Skip sessions with invalid timestamps (required by API)
-		if not start_time or not end_time then
-			logger.warn("Crossbill API: Skipping session with invalid timestamps, id:", session.id)
-			goto continue
-		end
-
 		local api_session = {
 			book_title = session.book_title or "Unknown",
 			book_author = session.book_author,
-			start_time = start_time,
-			end_time = end_time,
+			start_time = unixToISO8601(session.start_time),
+			end_time = unixToISO8601(session.end_time),
 			device_id = session.device_id,
 		}
 
@@ -161,13 +152,6 @@ function ApiClient:uploadReadingSessions(sessions)
 		end
 
 		table.insert(api_sessions, api_session)
-		::continue::
-	end
-
-	-- If no valid sessions after filtering, return failure so they aren't marked as synced
-	if #api_sessions == 0 then
-		logger.warn("Crossbill API: No valid sessions to upload after filtering (all had invalid timestamps)")
-		return false, nil, "All sessions had invalid timestamps"
 	end
 
 	logger.info("Crossbill API: Prepared", #api_sessions, "sessions for upload")

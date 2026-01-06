@@ -237,15 +237,39 @@ function CrossbillSync:uploadReadingSessions()
 	end
 
 	local success, response, err = self.api_client:uploadReadingSessions(sessions)
-	if success then
-		-- Mark all uploaded sessions as synced
-		local ids = {}
-		for _, session in ipairs(sessions) do
-			table.insert(ids, session.id)
+	if success and response then
+		-- Build set of failed session indices (API uses 0-based indexing)
+		local failed_indices = {}
+		if response.failed_sessions then
+			for _, failed in ipairs(response.failed_sessions) do
+				failed_indices[failed.index + 1] = true -- Convert to 1-based
+			end
 		end
-		self.session_tracker:markSessionsSynced(ids)
-		logger.info("Crossbill: Synced", #sessions, "reading sessions")
-		return true, #sessions
+
+		-- Separate into synced vs failed
+		local synced_ids = {}
+		local failed_ids = {}
+		for i, session in ipairs(sessions) do
+			if failed_indices[i] then
+				table.insert(failed_ids, session.id)
+			else
+				table.insert(synced_ids, session.id)
+			end
+		end
+
+		-- Mark synced sessions
+		if #synced_ids > 0 then
+			self.session_tracker:markSessionsSynced(synced_ids)
+		end
+
+		-- Increment attempts for failed sessions
+		if #failed_ids > 0 then
+			self.session_tracker:incrementSyncAttempts(failed_ids)
+			logger.warn("Crossbill:", #failed_ids, "sessions failed validation")
+		end
+
+		logger.info("Crossbill: Synced", #synced_ids, "reading sessions")
+		return true, #synced_ids
 	end
 
 	logger.warn("Crossbill: Failed to sync reading sessions:", err)

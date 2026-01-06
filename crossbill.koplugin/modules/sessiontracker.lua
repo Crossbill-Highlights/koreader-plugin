@@ -468,6 +468,42 @@ function SessionTracker:markSessionsSynced(session_ids)
 	return true
 end
 
+--- Increment sync attempts for sessions that failed to sync
+-- @param session_ids table Array of session IDs to increment
+-- @return boolean Success status
+function SessionTracker:incrementSyncAttempts(session_ids)
+	if not self._initialized or not self.db then
+		return false
+	end
+
+	if not session_ids or #session_ids == 0 then
+		return true
+	end
+
+	local success, err = pcall(function()
+		-- Build placeholder string for IN clause
+		local placeholders = {}
+		for i = 1, #session_ids do
+			placeholders[i] = "?"
+		end
+
+		local sql = "UPDATE sessions SET sync_attempts = sync_attempts + 1 WHERE id IN ("
+			.. table.concat(placeholders, ",")
+			.. ")"
+		local stmt = self.db:prepare(sql)
+		stmt:bind(unpack(session_ids))
+		stmt:step()
+		stmt:close()
+	end)
+
+	if not success then
+		logger.err("Crossbill SessionTracker: Error incrementing sync attempts:", err)
+		return false
+	end
+
+	return true
+end
+
 --- Get sessions for a specific book
 -- @param book_hash string MD5 hash of the book file path
 -- @return table Array of session records
