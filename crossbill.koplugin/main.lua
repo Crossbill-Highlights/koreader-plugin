@@ -137,41 +137,48 @@ function CrossbillSync:doSync(is_autosync)
 	local highlight_extractor = HighlightExtractor:new(self.ui)
 	local highlights = highlight_extractor:getHighlights(doc_path)
 
-	if not highlights or #highlights == 0 then
-		logger.dbg("Crossbill: No highlights to sync")
-		return
-	end
+	if highlights and #highlights > 0 then
+		logger.dbg("Crossbill: Found", #highlights, "highlights")
 
-	logger.dbg("Crossbill: Found", #highlights, "highlights")
+		-- Add chapter numbers to highlights
+		highlight_extractor:addChapterNumbers(highlights)
 
-	-- Add chapter numbers to highlights
-	highlight_extractor:addChapterNumbers(highlights)
+		-- Upload highlights to server
+		local upload_success, response, err = self.api_client:uploadHighlights(book_data, highlights)
 
-	-- Upload highlights to server
-	local upload_success, response, err = self.api_client:uploadHighlights(book_data, highlights)
-
-	if not upload_success then
-		if not is_autosync then
-			if err and err:match("^Authentication") then
-				UI.showAuthError(err)
-			else
-				UI.showSyncFailed(err)
+		if not upload_success then
+			if not is_autosync then
+				if err and err:match("^Authentication") then
+					UI.showAuthError(err)
+				else
+					UI.showSyncFailed(err)
+				end
 			end
+			return
 		end
-		return
-	end
 
-	-- Upload cover image if available
-	if response and response.book_id then
-		self:uploadCoverImage(response.book_id, book_metadata)
-	end
+		-- Upload cover image if available
+		if response and response.book_id then
+			self:uploadCoverImage(response.book_id, book_metadata)
+		end
 
-	-- Upload reading sessions
-	self:uploadReadingSessions()
+		-- Upload reading sessions
+		self:uploadReadingSessions()
 
-	-- Show success message for manual syncs
-	if not is_autosync then
-		UI.showSyncSuccess(response.highlights_created, response.highlights_skipped)
+		-- Show success message for manual syncs
+		if not is_autosync then
+			UI.showSyncSuccess(response.highlights_created, response.highlights_skipped)
+		end
+	else
+		-- Upload reading sessions
+		response = self:uploadReadingSessions()
+
+		-- TODO: Upload cover image with book id!
+		-- -- Upload cover image if available
+		-- if response and response.book_id then
+		-- 	self:uploadCoverImage(response.book_id, book_metadata)
+		-- end
+		-- end
 	end
 end
 

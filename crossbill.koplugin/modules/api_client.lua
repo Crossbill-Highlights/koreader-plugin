@@ -8,6 +8,11 @@ Handles highlight uploads, cover image uploads, and other API operations.
 local Network = require("modules/network")
 local logger = require("logger")
 
+-- Handle empty array JSON serialization
+local JSON = require("json")
+-- The most reliable way to get the marker for an empty array is to decode one
+local empty_array = JSON.decode("[]") or {}
+
 local ApiClient = {}
 ApiClient.__index = ApiClient
 
@@ -130,8 +135,16 @@ function ApiClient:uploadReadingSessions(sessions)
 	local api_sessions = {}
 	for _, session in ipairs(sessions) do
 		local api_session = {
-			book_title = session.book_title or "Unknown",
-			book_author = session.book_author,
+			book = {
+				title = session.book_title or "Unknown",
+				author = session.book_author or "",
+				isbn = session.book_isbn or "",
+				cover = session.book_cover or "",
+				description = session.book_description or "",
+				language = session.book_language or "",
+				page_count = tonumber(session.book_page_count) or 0,
+				keywords = (session.book_keywords and #session.book_keywords > 0) and session.book_keywords or empty_array,
+			},
 			start_time = unixToISO8601(session.start_time),
 			end_time = unixToISO8601(session.end_time),
 			device_id = session.device_id,
@@ -141,14 +154,24 @@ function ApiClient:uploadReadingSessions(sessions)
 		if session.position_type == "xpointer" then
 			api_session.start_xpoint = session.start_position
 			api_session.end_xpoint = session.end_position
+		else
+			-- For fixed layout, ensure we send string/null for xpoints if required, 
+			-- but usually API handles missing fields. 
+			-- If strict schema requires them:
+			api_session.start_xpoint = ""
+			api_session.end_xpoint = ""
 		end
 
 		if session.start_page then
 			api_session.start_page = tonumber(session.start_page)
+		else
+			api_session.start_page = 0
 		end
 
 		if session.end_page then
 			api_session.end_page = tonumber(session.end_page)
+		else
+			api_session.end_page = 0
 		end
 
 		table.insert(api_sessions, api_session)
@@ -156,7 +179,7 @@ function ApiClient:uploadReadingSessions(sessions)
 
 	logger.info("Crossbill API: Prepared", #api_sessions, "sessions for upload")
 
-	local payload = { sessions = api_sessions }
+	local payload = { sessions = (#api_sessions > 0) and api_sessions or empty_array }
 
 	local api_url = self:getApiUrl() .. "/reading_sessions/upload"
 	logger.dbg("Crossbill API: Sending", #api_sessions, "reading sessions to", api_url)

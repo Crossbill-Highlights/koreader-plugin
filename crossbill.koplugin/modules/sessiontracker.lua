@@ -9,6 +9,9 @@ page numbers for fixed-layout docs) for later sync and analytics.
 local logger = require("logger")
 local SQ3 = require("lua-ljsqlite3/init")
 local Device = require("device")
+local BookMetadata = require("modules/book_metadata")
+local JSON = require("json")
+local empty_array = JSON.decode("[]") or {}
 
 local SessionTracker = {}
 SessionTracker.__index = SessionTracker
@@ -19,6 +22,19 @@ local DB_FILENAME = "crossbill_sessions.sqlite3"
 
 -- Database schema
 local SCHEMA = [[
+CREATE TABLE IF NOT EXISTS books (
+    book_hash TEXT PRIMARY KEY,
+    title TEXT,
+    author TEXT,
+    isbn TEXT,
+    cover TEXT,
+    description TEXT,
+    language TEXT,
+    page_count INTEGER,
+    keywords TEXT,
+    updated_at INTEGER DEFAULT (strftime('%s', 'now'))
+);
+
 CREATE TABLE IF NOT EXISTS sessions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     book_file TEXT NOT NULL,
@@ -41,6 +57,7 @@ CREATE TABLE IF NOT EXISTS sessions (
 );
 
 CREATE INDEX IF NOT EXISTS idx_sessions_book_hash ON sessions(book_hash);
+CREATE INDEX IF NOT EXISTS idx_books_book_hash ON books(book_hash);
 CREATE INDEX IF NOT EXISTS idx_sessions_synced ON sessions(synced);
 CREATE INDEX IF NOT EXISTS idx_sessions_start_time ON sessions(start_time);
 ]]
@@ -227,19 +244,65 @@ function SessionTracker:startSession(document, ui)
 	-- Get book title and author from document properties
 	local book_title = nil
 	local book_author = nil
-	local success, err = pcall(function()
-		local props = document:getProps()
-		if props then
-			if props.title and props.title ~= "" then
-				book_title = props.title
-			end
-			if props.authors and props.authors ~= "" then
-				book_author = props.authors
-			end
+	local metadata = nil
+
+	-- Extract full metadata if UI is available
+	if ui then
+		local meta_extractor = BookMetadata:new(ui)
+		local success, book_data = pcall(function()
+			return meta_extractor:extractBookData()
+		end)
+		if success and book_data then
+			metadata = book_data
+			book_title = book_data.title
+			book_author = book_data.author
+
+						-- Save/Update book metadata in database
+						pcall(function()
+							local keywords = (book_data.keywords and #book_data.keywords > 0) and book_data.keywords or empty_array
+							local keywords_json = JSON.encode(keywords)
+							
+							local stmt = self.db:prepare([[					INSERT OR REPLACE INTO books (
+						book_hash, title, author, isbn, description,
+						language, page_count, keywords, cover, updated_at
+					) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%s', 'now'))
+				]])
+
+				stmt:bind(
+					self:_getBookHash(file_path),
+					book_data.title,
+					book_data.author,
+					book_data.isbn,
+					book_data.description,
+					book_data.language,
+					book_data.page_count,
+					keywords_json,
+					"" -- Cover string (placeholder for now)
+				)
+				stmt:step()
+				stmt:close()
+			end)
+		else
+			logger.warn("Crossbill SessionTracker: Failed to extract book metadata")
 		end
-	end)
-	if not success then
-		logger.dbg("Crossbill SessionTracker: Could not get book properties:", err)
+	end
+
+	-- Fallback if metadata extraction failed or UI not available (shouldn't happen in normal reading)
+	if not book_title or not book_author then
+		local success, err = pcall(function()
+			local props = document:getProps()
+			if props then
+				if not book_title and props.title and props.title ~= "" then
+					book_title = props.title
+				end
+				if not book_author and props.authors and props.authors ~= "" then
+					book_author = props.authors
+				end
+			end
+		end)
+		if not success then
+			logger.dbg("Crossbill SessionTracker: Could not get book properties:", err)
+		end
 	end
 
 	self.current_session = {
@@ -380,37 +443,35 @@ function SessionTracker:getUnsyncedSessions()
 	local sessions = {}
 	local success, err = pcall(function()
 		local stmt = self.db:prepare([[
-            SELECT id, book_file, book_hash, book_title, book_author,
-                   start_time, end_time, duration_seconds,
-                   position_type, start_position, end_position,
-                   start_page, end_page, total_pages,
-                   device_id, created_at
-            FROM sessions
-            WHERE synced = 0
-            ORDER BY start_time ASC
+            SELECT s.id, s.book_file, s.book_hash, s.book_title, s.book_author,
+                   s.start_time, s.end_time, s.duration_seconds,
+                   s.position_type, s.start_position, s.end_position,
+                   s.start_page, s.end_page, s.total_pages,
+                   s.device_id, s.created_at,
+                   b.title, b.author, b.isbn, b.cover, b.description,
+                   b.language, b.page_count, b.keywords
+            FROM sessions s
+            LEFT JOIN books b ON s.book_hash = b.book_hash
+            WHERE s.synced = 0
+            ORDER BY s.start_time ASC
         ]])
 
 		for row in stmt:rows() do
-			-- Debug: log raw row data for first row
-			if #sessions == 0 then
-				logger.dbg(
-					"Crossbill SessionTracker: Raw row[1-8]:",
-					row[1],
-					row[2],
-					row[3],
-					row[4],
-					row[5],
-					row[6],
-					row[7],
-					row[8]
-				)
+			-- Parse keywords JSON
+			local keywords = nil
+			if row[24] then
+				pcall(function()
+					keywords = JSON.decode(row[24])
+				end)
 			end
+
 			table.insert(sessions, {
 				id = row[1],
 				book_file = row[2],
 				book_hash = row[3],
-				book_title = row[4],
-				book_author = row[5],
+				-- Use book table data if available, fallback to session data
+				book_title = row[17] or row[4],
+				book_author = row[18] or row[5],
 				start_time = row[6],
 				end_time = row[7],
 				duration_seconds = row[8],
@@ -422,6 +483,13 @@ function SessionTracker:getUnsyncedSessions()
 				total_pages = row[14],
 				device_id = row[15],
 				created_at = row[16],
+				-- Extra book metadata
+				book_isbn = row[19],
+				book_cover = row[20],
+				book_description = row[21],
+				book_language = row[22],
+				book_page_count = row[23],
+				book_keywords = keywords,
 			})
 		end
 		stmt:close()
