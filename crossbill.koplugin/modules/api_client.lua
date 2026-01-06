@@ -103,4 +103,94 @@ function ApiClient:uploadCover(book_id, cover_data)
 	end
 end
 
+local function unixToISO8601(timestamp)
+	if not timestamp then
+		return nil
+	end
+	-- Convert to number (handles LuaJIT cdata int64 from SQLite)
+	local ts = tonumber(timestamp)
+	if not ts then
+		return nil
+	end
+	return os.date("!%Y-%m-%dT%H:%M:%SZ", ts)
+end
+
+--- Upload reading sessions to the server
+-- @param sessions table Array of session records from SessionTracker
+-- @return boolean Success status
+-- @return table|nil Response data
+-- @return string|nil Error message
+function ApiClient:uploadReadingSessions(sessions)
+	local token, auth_err = self.auth:getValidToken()
+	if not token then
+		return false, nil, auth_err or "Authentication failed"
+	end
+
+	-- Transform sessions to API format
+	local api_sessions = {}
+	for _, session in ipairs(sessions) do
+		local start_time = unixToISO8601(session.start_time)
+		local end_time = unixToISO8601(session.end_time)
+
+		-- Skip sessions with invalid timestamps (required by API)
+		if not start_time or not end_time then
+			logger.warn("Crossbill API: Skipping session with invalid timestamps, id:", session.id)
+			goto continue
+		end
+
+		local api_session = {
+			book_title = session.book_title or "Unknown",
+			book_author = session.book_author,
+			start_time = start_time,
+			end_time = end_time,
+			device_id = session.device_id,
+		}
+
+		-- Map position data based on type
+		if session.position_type == "xpointer" then
+			api_session.start_xpoint = session.start_position
+			api_session.end_xpoint = session.end_position
+		end
+
+		if session.start_page then
+			api_session.start_page = tonumber(session.start_page)
+		end
+
+		if session.end_page then
+			api_session.end_page = tonumber(session.end_page)
+		end
+
+		table.insert(api_sessions, api_session)
+		::continue::
+	end
+
+	-- If no valid sessions after filtering, return failure so they aren't marked as synced
+	if #api_sessions == 0 then
+		logger.warn("Crossbill API: No valid sessions to upload after filtering (all had invalid timestamps)")
+		return false, nil, "All sessions had invalid timestamps"
+	end
+
+	logger.info("Crossbill API: Prepared", #api_sessions, "sessions for upload")
+
+	local payload = { sessions = api_sessions }
+
+	local api_url = self:getApiUrl() .. "/reading_sessions/upload"
+	logger.dbg("Crossbill API: Sending", #api_sessions, "reading sessions to", api_url)
+
+	local code, response_data, err = Network.postJson(api_url, payload, token)
+
+	if not code then
+		logger.err("Crossbill API: Network error:", err)
+		return false, nil, err or "Network error"
+	end
+
+	if code == 200 and response_data then
+		logger.info("Crossbill API: Reading sessions uploaded successfully")
+		return true, response_data, nil
+	else
+		logger.warn("Crossbill API: Reading sessions upload failed with code:", code)
+		return false, nil, "Upload failed: " .. tostring(code)
+	end
+end
+
 return ApiClient

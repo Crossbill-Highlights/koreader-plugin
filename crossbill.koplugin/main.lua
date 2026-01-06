@@ -166,6 +166,9 @@ function CrossbillSync:doSync(is_autosync)
 		self:uploadCoverImage(response.book_id, book_metadata)
 	end
 
+	-- Upload reading sessions
+	self:uploadReadingSessions()
+
 	-- Show success message for manual syncs
 	if not is_autosync then
 		UI.showSyncSuccess(response.highlights_created, response.highlights_skipped)
@@ -200,6 +203,64 @@ function CrossbillSync:uploadCoverImage(book_id, book_metadata)
 	end
 end
 
+--- Upload unsynced reading sessions to server
+-- @return boolean Success status
+-- @return number Number of sessions synced (or error message on failure)
+function CrossbillSync:uploadReadingSessions()
+	if not self.session_tracker or not self.settings:isSessionTrackingEnabled() then
+		logger.dbg("Crossbill: No session tracker enabled")
+		return true, 0
+	end
+
+	local sessions = self.session_tracker:getUnsyncedSessions()
+	if #sessions == 0 then
+		logger.dbg("Crossbill: No reading sessions to sync")
+		return true, 0
+	end
+
+	logger.info("Crossbill: Found", #sessions, "unsynced reading sessions")
+	-- Debug: log first session details
+	if sessions[1] then
+		local s = sessions[1]
+		logger.dbg(
+			"Crossbill: First session - id:",
+			s.id,
+			"title:",
+			s.book_title,
+			"start_time:",
+			s.start_time,
+			"end_time:",
+			s.end_time,
+			"type:",
+			type(s.start_time)
+		)
+	end
+
+	local success, response, err = self.api_client:uploadReadingSessions(sessions)
+	if success then
+		-- Mark all uploaded sessions as synced
+		local ids = {}
+		for _, session in ipairs(sessions) do
+			table.insert(ids, session.id)
+		end
+		self.session_tracker:markSessionsSynced(ids)
+		logger.info("Crossbill: Synced", #sessions, "reading sessions")
+		return true, #sessions
+	end
+
+	logger.warn("Crossbill: Failed to sync reading sessions:", err)
+	return false, err
+end
+
+--- Try to sync reading sessions opportunistically (only if already online)
+function CrossbillSync:trySessionSync()
+	local NetworkMgr = require("ui/network/manager")
+	if NetworkMgr:isOnline() then
+		self:uploadReadingSessions()
+	end
+	-- If offline, sessions remain in DB for next sync opportunity
+end
+
 -- Event handlers for session tracking and auto-sync
 
 --- Called when document is ready for reading
@@ -230,6 +291,7 @@ end
 function CrossbillSync:onCloseDocument()
 	if self.settings:isSessionTrackingEnabled() and self.session_tracker then
 		self.session_tracker:endSession(self.ui.document, self.ui, "document_close")
+		self:trySessionSync()
 	end
 	return false
 end
@@ -242,6 +304,9 @@ function CrossbillSync:onSuspend()
 	if self.settings:isAutosyncEnabled() then
 		logger.info("Crossbill: Auto-syncing on suspend")
 		self:syncCurrentBook(true)
+	else
+		-- Try opportunistic session sync even when auto-sync is disabled
+		self:trySessionSync()
 	end
 	return false
 end
@@ -250,11 +315,17 @@ end
 function CrossbillSync:onExit()
 	if self.settings:isSessionTrackingEnabled() and self.session_tracker then
 		self.session_tracker:endSession(self.ui.document, self.ui, "app_exit")
-		self.session_tracker:close()
 	end
 	if self.settings:isAutosyncEnabled() then
 		logger.info("Crossbill: Auto-syncing on exit")
 		self:syncCurrentBook(true)
+	else
+		-- Try opportunistic session sync even when auto-sync is disabled
+		self:trySessionSync()
+	end
+	-- Close database after sync attempts
+	if self.session_tracker then
+		self.session_tracker:close()
 	end
 	return false
 end

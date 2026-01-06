@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS sessions (
     book_file TEXT NOT NULL,
     book_hash TEXT NOT NULL,
     book_title TEXT,
+    book_author TEXT,
     start_time INTEGER NOT NULL,
     end_time INTEGER NOT NULL,
     duration_seconds INTEGER,
@@ -72,6 +73,10 @@ function SessionTracker:init(settings_dir)
 		self.db:exec("PRAGMA journal_mode=WAL;")
 		-- Create schema
 		self.db:exec(SCHEMA)
+		-- Migrate existing databases: add book_author column if missing
+		pcall(function()
+			self.db:exec("ALTER TABLE sessions ADD COLUMN book_author TEXT")
+		end)
 	end)
 
 	if not success then
@@ -219,22 +224,29 @@ function SessionTracker:startSession(document, ui)
 		return
 	end
 
-	-- Get book title from document properties
+	-- Get book title and author from document properties
 	local book_title = nil
+	local book_author = nil
 	local success, err = pcall(function()
 		local props = document:getProps()
-		if props and props.title and props.title ~= "" then
-			book_title = props.title
+		if props then
+			if props.title and props.title ~= "" then
+				book_title = props.title
+			end
+			if props.authors and props.authors ~= "" then
+				book_author = props.authors
+			end
 		end
 	end)
 	if not success then
-		logger.dbg("Crossbill SessionTracker: Could not get book title:", err)
+		logger.dbg("Crossbill SessionTracker: Could not get book properties:", err)
 	end
 
 	self.current_session = {
 		book_file = file_path,
 		book_hash = self:_getBookHash(file_path),
 		book_title = book_title,
+		book_author = book_author,
 		start_time = os.time(),
 		start_position = position.position,
 		start_page = position.page,
@@ -321,18 +333,19 @@ function SessionTracker:endSession(document, ui, reason)
 	local success, err = pcall(function()
 		local stmt = self.db:prepare([[
             INSERT INTO sessions (
-                book_file, book_hash, book_title,
+                book_file, book_hash, book_title, book_author,
                 start_time, end_time, duration_seconds,
                 position_type, start_position, end_position,
                 start_page, end_page, total_pages,
                 device_id
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ]])
 
 		stmt:bind(
 			session.book_file,
 			session.book_hash,
 			session.book_title,
+			session.book_author,
 			session.start_time,
 			end_time,
 			duration,
@@ -377,7 +390,7 @@ function SessionTracker:getUnsyncedSessions()
 	local sessions = {}
 	local success, err = pcall(function()
 		local stmt = self.db:prepare([[
-            SELECT id, book_file, book_hash, book_title,
+            SELECT id, book_file, book_hash, book_title, book_author,
                    start_time, end_time, duration_seconds,
                    position_type, start_position, end_position,
                    start_page, end_page, total_pages,
@@ -388,22 +401,27 @@ function SessionTracker:getUnsyncedSessions()
         ]])
 
 		for row in stmt:rows() do
+			-- Debug: log raw row data for first row
+			if #sessions == 0 then
+				logger.dbg("Crossbill SessionTracker: Raw row[1-8]:", row[1], row[2], row[3], row[4], row[5], row[6], row[7], row[8])
+			end
 			table.insert(sessions, {
 				id = row[1],
 				book_file = row[2],
 				book_hash = row[3],
 				book_title = row[4],
-				start_time = row[5],
-				end_time = row[6],
-				duration_seconds = row[7],
-				position_type = row[8],
-				start_position = row[9],
-				end_position = row[10],
-				start_page = row[11],
-				end_page = row[12],
-				total_pages = row[13],
-				device_id = row[14],
-				created_at = row[15],
+				book_author = row[5],
+				start_time = row[6],
+				end_time = row[7],
+				duration_seconds = row[8],
+				position_type = row[9],
+				start_position = row[10],
+				end_position = row[11],
+				start_page = row[12],
+				end_page = row[13],
+				total_pages = row[14],
+				device_id = row[15],
+				created_at = row[16],
 			})
 		end
 		stmt:close()
@@ -461,7 +479,7 @@ function SessionTracker:getSessionsForBook(book_hash)
 	local sessions = {}
 	local success, err = pcall(function()
 		local stmt = self.db:prepare([[
-            SELECT id, book_file, book_hash, book_title,
+            SELECT id, book_file, book_hash, book_title, book_author,
                    start_time, end_time, duration_seconds,
                    position_type, start_position, end_position,
                    start_page, end_page, total_pages,
@@ -479,18 +497,19 @@ function SessionTracker:getSessionsForBook(book_hash)
 				book_file = row[2],
 				book_hash = row[3],
 				book_title = row[4],
-				start_time = row[5],
-				end_time = row[6],
-				duration_seconds = row[7],
-				position_type = row[8],
-				start_position = row[9],
-				end_position = row[10],
-				start_page = row[11],
-				end_page = row[12],
-				total_pages = row[13],
-				device_id = row[14],
-				created_at = row[15],
-				synced = row[16],
+				book_author = row[5],
+				start_time = row[6],
+				end_time = row[7],
+				duration_seconds = row[8],
+				position_type = row[9],
+				start_position = row[10],
+				end_position = row[11],
+				start_page = row[12],
+				end_page = row[13],
+				total_pages = row[14],
+				device_id = row[15],
+				created_at = row[16],
+				synced = row[17],
 			})
 		end
 		stmt:close()
