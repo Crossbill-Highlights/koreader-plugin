@@ -14,7 +14,7 @@ local SessionTracker = {}
 SessionTracker.__index = SessionTracker
 
 -- Constants
-local MIN_SESSION_DURATION = 10 -- seconds, sessions shorter than this are discarded
+local MIN_SESSION_DURATION = 60 -- seconds, sessions shorter than this are discarded
 local DB_FILENAME = "crossbill_sessions.sqlite3"
 
 -- Database schema
@@ -307,12 +307,7 @@ function SessionTracker:endSession(document, ui, reason)
 
 	-- Discard very short sessions
 	if duration < MIN_SESSION_DURATION then
-		logger.dbg(
-			"Crossbill SessionTracker: Discarding short session (",
-			duration,
-			"seconds) - reason:",
-			reason
-		)
+		logger.dbg("Crossbill SessionTracker: Discarding short session (", duration, "seconds) - reason:", reason)
 		self.current_session = nil
 		return
 	end
@@ -363,12 +358,7 @@ function SessionTracker:endSession(document, ui, reason)
 	end)
 
 	if success then
-		logger.dbg(
-			"Crossbill SessionTracker: Saved session (",
-			duration,
-			"seconds) - reason:",
-			reason
-		)
+		logger.dbg("Crossbill SessionTracker: Saved session (", duration, "seconds) - reason:", reason)
 		-- Checkpoint WAL to ensure data is written to main file
 		pcall(function()
 			self.db:exec("PRAGMA wal_checkpoint(PASSIVE);")
@@ -403,7 +393,17 @@ function SessionTracker:getUnsyncedSessions()
 		for row in stmt:rows() do
 			-- Debug: log raw row data for first row
 			if #sessions == 0 then
-				logger.dbg("Crossbill SessionTracker: Raw row[1-8]:", row[1], row[2], row[3], row[4], row[5], row[6], row[7], row[8])
+				logger.dbg(
+					"Crossbill SessionTracker: Raw row[1-8]:",
+					row[1],
+					row[2],
+					row[3],
+					row[4],
+					row[5],
+					row[6],
+					row[7],
+					row[8]
+				)
 			end
 			table.insert(sessions, {
 				id = row[1],
