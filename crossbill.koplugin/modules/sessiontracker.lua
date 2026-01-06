@@ -433,75 +433,6 @@ function SessionTracker:endSession(document, ui, reason)
 	self.current_session = nil
 end
 
---- Get all unsynced sessions for future server sync
--- @return table Array of session records
-function SessionTracker:getUnsyncedSessions()
-	if not self._initialized or not self.db then
-		return {}
-	end
-
-	local sessions = {}
-	local success, err = pcall(function()
-		local stmt = self.db:prepare([[
-            SELECT s.id, s.book_file, s.book_hash, s.book_title, s.book_author,
-                   s.start_time, s.end_time, s.duration_seconds,
-                   s.position_type, s.start_position, s.end_position,
-                   s.start_page, s.end_page, s.total_pages,
-                   s.device_id, s.created_at,
-                   b.title, b.author, b.isbn, b.cover, b.description,
-                   b.language, b.page_count, b.keywords
-            FROM sessions s
-            LEFT JOIN books b ON s.book_hash = b.book_hash
-            WHERE s.synced = 0
-            ORDER BY s.start_time ASC
-        ]])
-
-		for row in stmt:rows() do
-			-- Parse keywords JSON
-			local keywords = nil
-			if row[24] then
-				pcall(function()
-					keywords = JSON.decode(row[24])
-				end)
-			end
-
-			table.insert(sessions, {
-				id = row[1],
-				book_file = row[2],
-				book_hash = row[3],
-				-- Use book table data if available, fallback to session data
-				book_title = row[17] or row[4],
-				book_author = row[18] or row[5],
-				start_time = row[6],
-				end_time = row[7],
-				duration_seconds = row[8],
-				position_type = row[9],
-				start_position = row[10],
-				end_position = row[11],
-				start_page = row[12],
-				end_page = row[13],
-				total_pages = row[14],
-				device_id = row[15],
-				created_at = row[16],
-				-- Extra book metadata
-				book_isbn = row[19],
-				book_cover = row[20],
-				book_description = row[21],
-				book_language = row[22],
-				book_page_count = row[23],
-				book_keywords = keywords,
-			})
-		end
-		stmt:close()
-	end)
-
-	if not success then
-		logger.err("Crossbill SessionTracker: Error fetching unsynced sessions:", err)
-	end
-
-	return sessions
-end
-
 --- Mark sessions as synced
 -- @param session_ids table Array of session IDs to mark as synced
 -- @return boolean Success status
@@ -536,40 +467,61 @@ function SessionTracker:markSessionsSynced(session_ids)
 	return true
 end
 
---- Increment sync attempts for sessions that failed to sync
--- @param session_ids table Array of session IDs to increment
--- @return boolean Success status
-function SessionTracker:incrementSyncAttempts(session_ids)
+--- Get unsynced sessions for a specific book
+-- @param book_hash string MD5 hash of the book file path
+-- @return table Array of session records for API upload
+function SessionTracker:getUnsyncedSessionsForBook(book_hash)
 	if not self._initialized or not self.db then
-		return false
+		return {}
 	end
 
-	if not session_ids or #session_ids == 0 then
-		return true
+	if not book_hash then
+		return {}
 	end
 
+	local sessions = {}
 	local success, err = pcall(function()
-		-- Build placeholder string for IN clause
-		local placeholders = {}
-		for i = 1, #session_ids do
-			placeholders[i] = "?"
-		end
+		local stmt = self.db:prepare([[
+            SELECT s.id, s.book_file, s.book_hash, s.book_title, s.book_author,
+                   s.start_time, s.end_time, s.duration_seconds,
+                   s.position_type, s.start_position, s.end_position,
+                   s.start_page, s.end_page, s.total_pages,
+                   s.device_id, s.created_at
+            FROM sessions s
+            WHERE s.book_hash = ? AND s.synced = 0
+            ORDER BY s.start_time ASC
+        ]])
 
-		local sql = "UPDATE sessions SET sync_attempts = sync_attempts + 1 WHERE id IN ("
-			.. table.concat(placeholders, ",")
-			.. ")"
-		local stmt = self.db:prepare(sql)
-		stmt:bind(unpack(session_ids))
-		stmt:step()
+		stmt:bind(book_hash)
+
+		for row in stmt:rows() do
+			table.insert(sessions, {
+				id = row[1],
+				book_file = row[2],
+				book_hash = row[3],
+				book_title = row[4],
+				book_author = row[5],
+				start_time = row[6],
+				end_time = row[7],
+				duration_seconds = row[8],
+				position_type = row[9],
+				start_position = row[10],
+				end_position = row[11],
+				start_page = row[12],
+				end_page = row[13],
+				total_pages = row[14],
+				device_id = row[15],
+				created_at = row[16],
+			})
+		end
 		stmt:close()
 	end)
 
 	if not success then
-		logger.err("Crossbill SessionTracker: Error incrementing sync attempts:", err)
-		return false
+		logger.err("Crossbill SessionTracker: Error fetching unsynced sessions for book:", err)
 	end
 
-	return true
+	return sessions
 end
 
 --- Get sessions for a specific book

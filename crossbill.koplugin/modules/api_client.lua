@@ -120,12 +120,13 @@ local function unixToISO8601(timestamp)
 	return os.date("!%Y-%m-%dT%H:%M:%SZ", ts)
 end
 
---- Upload reading sessions to the server
+--- Upload reading sessions to the server for a single book
+-- @param book_data table Book metadata
 -- @param sessions table Array of session records from SessionTracker
 -- @return boolean Success status
--- @return table|nil Response data
+-- @return table|nil Response data (success, message, created_count, skipped_duplicate_count)
 -- @return string|nil Error message
-function ApiClient:uploadReadingSessions(sessions)
+function ApiClient:uploadReadingSessions(book_data, sessions)
 	local token, auth_err = self.auth:getValidToken()
 	if not token then
 		return false, nil, auth_err or "Authentication failed"
@@ -135,19 +136,11 @@ function ApiClient:uploadReadingSessions(sessions)
 	local api_sessions = {}
 	for _, session in ipairs(sessions) do
 		local api_session = {
-			book = {
-				title = session.book_title or "Unknown",
-				author = session.book_author or "",
-				isbn = session.book_isbn or "",
-				cover = session.book_cover or "",
-				description = session.book_description or "",
-				language = session.book_language or "",
-				page_count = tonumber(session.book_page_count) or 0,
-				keywords = (session.book_keywords and #session.book_keywords > 0) and session.book_keywords or empty_array,
-			},
 			start_time = unixToISO8601(session.start_time),
 			end_time = unixToISO8601(session.end_time),
 			device_id = session.device_id,
+			start_page = session.start_page and tonumber(session.start_page) or 0,
+			end_page = session.end_page and tonumber(session.end_page) or 0,
 		}
 
 		-- Map position data based on type
@@ -155,23 +148,8 @@ function ApiClient:uploadReadingSessions(sessions)
 			api_session.start_xpoint = session.start_position
 			api_session.end_xpoint = session.end_position
 		else
-			-- For fixed layout, ensure we send string/null for xpoints if required, 
-			-- but usually API handles missing fields. 
-			-- If strict schema requires them:
 			api_session.start_xpoint = ""
 			api_session.end_xpoint = ""
-		end
-
-		if session.start_page then
-			api_session.start_page = tonumber(session.start_page)
-		else
-			api_session.start_page = 0
-		end
-
-		if session.end_page then
-			api_session.end_page = tonumber(session.end_page)
-		else
-			api_session.end_page = 0
 		end
 
 		table.insert(api_sessions, api_session)
@@ -179,7 +157,10 @@ function ApiClient:uploadReadingSessions(sessions)
 
 	logger.info("Crossbill API: Prepared", #api_sessions, "sessions for upload")
 
-	local payload = { sessions = (#api_sessions > 0) and api_sessions or empty_array }
+	local payload = {
+		book = book_data,
+		sessions = (#api_sessions > 0) and api_sessions or empty_array,
+	}
 
 	local api_url = self:getApiUrl() .. "/reading_sessions/upload"
 	logger.dbg("Crossbill API: Sending", #api_sessions, "reading sessions to", api_url)
