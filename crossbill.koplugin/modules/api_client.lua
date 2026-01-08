@@ -69,18 +69,51 @@ function ApiClient:uploadHighlights(book_data, highlights)
 	end
 end
 
---- Upload a cover image for a book
--- @param book_id number The book ID
+--- Get book metadata from server by client_book_id
+-- @param client_book_id string The client-side book ID (hash of title|author)
+-- @return number|nil HTTP status code
+-- @return table|nil Response data containing book_id, bookname, author, hasCover, hasEpub
+-- @return string|nil Error message
+function ApiClient:getBookMetadata(client_book_id)
+	local token, auth_err = self.auth:getValidToken()
+	if not token then
+		return nil, nil, auth_err or "Authentication failed"
+	end
+
+	local api_url = self:getApiUrl() .. "/ereader/books/" .. client_book_id
+	logger.dbg("Crossbill API: Fetching book metadata from", api_url)
+
+	local code, response_data, err = Network.getJson(api_url, token)
+
+	if not code then
+		logger.err("Crossbill API: Network error fetching book metadata:", err)
+		return nil, nil, err or "Network error"
+	end
+
+	if code == 200 and response_data then
+		logger.dbg("Crossbill API: Book metadata fetched successfully")
+		return code, response_data, nil
+	elseif code == 404 then
+		logger.dbg("Crossbill API: Book not found (404)")
+		return code, nil, nil
+	else
+		logger.warn("Crossbill API: Fetch book metadata failed with code:", code)
+		return code, nil, "Fetch failed: " .. tostring(code)
+	end
+end
+
+--- Upload a cover image for a book using client_book_id
+-- @param client_book_id string The client-side book ID (hash of title|author)
 -- @param cover_data string The cover image binary data
 -- @return boolean Success status
 -- @return string|nil Error message
-function ApiClient:uploadCover(book_id, cover_data)
+function ApiClient:uploadCover(client_book_id, cover_data)
 	local token, auth_err = self.auth:getValidToken()
 	if not token then
 		return false, auth_err or "Authentication failed"
 	end
 
-	local api_url = self:getApiUrl() .. "/books/" .. book_id .. "/metadata/cover"
+	local api_url = self:getApiUrl() .. "/ereader/books/" .. client_book_id .. "/cover"
 	logger.dbg("Crossbill API: Uploading cover to", api_url)
 
 	local files = {
@@ -100,7 +133,7 @@ function ApiClient:uploadCover(book_id, cover_data)
 	end
 
 	if code == 200 then
-		logger.info("Crossbill API: Cover uploaded successfully for book", book_id)
+		logger.info("Crossbill API: Cover uploaded successfully for book", client_book_id)
 		return true, nil
 	else
 		logger.warn("Crossbill API: Cover upload failed with code:", code)

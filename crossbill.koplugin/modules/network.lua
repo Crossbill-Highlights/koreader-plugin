@@ -130,6 +130,45 @@ function Network.postJson(url, data, token)
 	return code, nil, nil
 end
 
+--- Make a JSON GET request
+-- @param url string The URL to request
+-- @param token string|nil Bearer token for authorization
+-- @return number|nil HTTP status code
+-- @return table|nil Parsed JSON response
+-- @return string|nil Error message
+function Network.getJson(url, token)
+	local JSON = require("json")
+
+	local headers = {
+		["Accept"] = "application/json",
+	}
+
+	if token then
+		headers["Authorization"] = "Bearer " .. token
+	end
+
+	local code, response_text, err = Network.request({
+		url = url,
+		method = "GET",
+		headers = headers,
+	})
+
+	if not code then
+		return nil, nil, err
+	end
+
+	if response_text and response_text ~= "" then
+		local ok, response_data = pcall(JSON.decode, response_text)
+		if ok then
+			return code, response_data, nil
+		else
+			return code, nil, "Invalid JSON response"
+		end
+	end
+
+	return code, nil, nil
+end
+
 --- Make a form-urlencoded POST request
 -- @param url string The URL to request
 -- @param data table Key-value pairs to encode

@@ -160,10 +160,8 @@ function CrossbillSync:doSync(is_autosync)
 			return
 		end
 
-		-- Upload cover image if available
-		if response and response.book_id then
-			self:uploadCoverImage(response.book_id, book_metadata)
-		end
+		-- Upload cover image if available (uses client_book_id to check with server)
+		self:uploadCoverImage(book_data.client_book_id, book_metadata)
 
 		-- Upload reading sessions
 		self:uploadReadingSessions()
@@ -174,28 +172,47 @@ function CrossbillSync:doSync(is_autosync)
 		end
 	else
 		-- Upload reading sessions (no highlights for this book)
-		local success, _, book_id = self:uploadReadingSessions()
+		self:uploadReadingSessions()
 
-		-- Upload cover image if book_id was returned
-		if success and book_id then
-			self:uploadCoverImage(book_id, book_metadata)
-		end
+		-- Upload cover image if available (uses client_book_id to check with server)
+		self:uploadCoverImage(book_data.client_book_id, book_metadata)
 	end
 end
 
---- Upload cover image for a book
--- @param book_id number The book ID from the server
+--- Upload cover image for a book if server doesn't have one
+-- First checks with server if cover is needed, then uploads if hasCover is false
+-- @param client_book_id string The client book ID (hash of title|author)
 -- @param book_metadata BookMetadata instance
-function CrossbillSync:uploadCoverImage(book_id, book_metadata)
+function CrossbillSync:uploadCoverImage(client_book_id, book_metadata)
 	local success, err = pcall(function()
-		local tmp_path, cover_data, cover_image = book_metadata:extractCoverToFile(book_id)
+		-- First check if server already has the cover
+		local code, metadata, _ = self.api_client:getBookMetadata(client_book_id)
+
+		if code == 404 then
+			-- Book not found on server, skip cover upload
+			logger.dbg("Crossbill: Book not found on server, skipping cover upload")
+			return
+		end
+
+		if not metadata then
+			logger.warn("Crossbill: Failed to fetch book metadata, skipping cover upload")
+			return
+		end
+
+		if metadata.hasCover then
+			logger.dbg("Crossbill: Server already has cover, skipping upload")
+			return
+		end
+
+		-- Server doesn't have cover, extract and upload it
+		local tmp_path, cover_data, cover_image = book_metadata:extractCoverToFile(client_book_id)
 
 		if not cover_data then
 			return
 		end
 
-		-- Upload cover
-		self.api_client:uploadCover(book_id, cover_data)
+		-- Upload cover using client_book_id
+		self.api_client:uploadCover(client_book_id, cover_data)
 
 		-- Cleanup
 		if cover_image then
