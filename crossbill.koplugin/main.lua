@@ -160,11 +160,11 @@ function CrossbillSync:doSync(is_autosync)
 			return
 		end
 
-		-- Upload cover image if available (uses client_book_id to check with server)
-		self:uploadCoverImage(book_data.client_book_id, book_metadata)
-
 		-- Upload reading sessions
 		self:uploadReadingSessions()
+
+		-- Upload cover image if available (uses client_book_id to check with server)
+		self:uploadCoverImage(book_data.client_book_id, book_metadata)
 
 		-- Show success message for manual syncs
 		if not is_autosync then
