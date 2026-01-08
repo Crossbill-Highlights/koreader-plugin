@@ -141,6 +141,46 @@ function ApiClient:uploadCover(client_book_id, cover_data)
 	end
 end
 
+--- Upload an EPUB file for a book using client_book_id
+-- @param client_book_id string The client-side book ID (hash of title|author)
+-- @param epub_data string The EPUB file binary data
+-- @param filename string The original EPUB filename
+-- @return boolean Success status
+-- @return string|nil Error message
+function ApiClient:uploadEpub(client_book_id, epub_data, filename)
+	local token, auth_err = self.auth:getValidToken()
+	if not token then
+		return false, auth_err or "Authentication failed"
+	end
+
+	local api_url = self:getApiUrl() .. "/ereader/books/" .. client_book_id .. "/epub"
+	logger.dbg("Crossbill API: Uploading EPUB to", api_url)
+
+	local files = {
+		{
+			name = "epub",
+			filename = filename,
+			content_type = "application/epub+zip",
+			data = epub_data,
+		},
+	}
+
+	local code, _, err = Network.postMultipart(api_url, files, token)
+
+	if not code then
+		logger.err("Crossbill API: Network error uploading EPUB:", err)
+		return false, err or "Network error"
+	end
+
+	if code == 200 then
+		logger.info("Crossbill API: EPUB uploaded successfully for book", client_book_id)
+		return true, nil
+	else
+		logger.warn("Crossbill API: EPUB upload failed with code:", code)
+		return false, "Upload failed: " .. tostring(code)
+	end
+end
+
 local function unixToISO8601(timestamp)
 	if not timestamp then
 		return nil

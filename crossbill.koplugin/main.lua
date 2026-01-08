@@ -140,6 +140,9 @@ function CrossbillSync:doSync(is_autosync)
 	local highlight_extractor = HighlightExtractor:new(self.ui)
 	local highlights = highlight_extractor:getHighlights(doc_path)
 
+	-- Track highlight upload response for success message
+	local highlights_response = nil
+
 	if highlights and #highlights > 0 then
 		logger.dbg("Crossbill: Found", #highlights, "highlights")
 
@@ -160,46 +163,63 @@ function CrossbillSync:doSync(is_autosync)
 			return
 		end
 
-		-- Upload reading sessions
-		self:uploadReadingSessions()
+		highlights_response = response
+	end
 
-		-- Upload cover image if available (uses client_book_id to check with server)
-		self:uploadCoverImage(book_data.client_book_id, book_metadata)
+	-- TODO: Add proper error handling and UI notifications here...
 
-		-- Show success message for manual syncs
-		if not is_autosync then
-			UI.showSyncSuccess(response.highlights_created, response.highlights_skipped)
-		end
-	else
-		-- Upload reading sessions (no highlights for this book)
-		self:uploadReadingSessions()
+	-- Upload reading sessions
+	self:uploadReadingSessions()
 
-		-- Upload cover image if available (uses client_book_id to check with server)
-		self:uploadCoverImage(book_data.client_book_id, book_metadata)
+	-- Fetch server metadata once for cover and EPUB uploads
+	local server_metadata = self:getServerBookMetadata(book_data.client_book_id)
+
+	-- Upload cover image if available
+	self:uploadCoverImage(book_data.client_book_id, book_metadata, server_metadata)
+
+	-- Upload EPUB file if available
+	self:uploadEpub(book_data.client_book_id, book_metadata, server_metadata)
+
+	-- Show success message for manual syncs
+	if not is_autosync then
+		local created = highlights_response and highlights_response.highlights_created or 0
+		local skipped = highlights_response and highlights_response.highlights_skipped or 0
+		UI.showSyncSuccess(created, skipped)
 	end
 end
 
+--- Fetch book metadata from the server
+-- @param client_book_id string The client book ID (hash of title|author)
+-- @return table|nil Server metadata containing hasCover, hasEpub, etc. or nil if not found
+function CrossbillSync:getServerBookMetadata(client_book_id)
+	local code, metadata, _ = self.api_client:getBookMetadata(client_book_id)
+
+	if code == 404 then
+		logger.dbg("Crossbill: Book not found on server")
+		return nil
+	end
+
+	if not metadata then
+		logger.warn("Crossbill: Failed to fetch book metadata from server")
+		return nil
+	end
+
+	return metadata
+end
+
 --- Upload cover image for a book if server doesn't have one
--- First checks with server if cover is needed, then uploads if hasCover is false
 -- @param client_book_id string The client book ID (hash of title|author)
 -- @param book_metadata BookMetadata instance
-function CrossbillSync:uploadCoverImage(client_book_id, book_metadata)
+-- @param server_metadata table|nil Server metadata from getServerBookMetadata
+function CrossbillSync:uploadCoverImage(client_book_id, book_metadata, server_metadata)
 	local success, err = pcall(function()
-		-- First check if server already has the cover
-		local code, metadata, _ = self.api_client:getBookMetadata(client_book_id)
-
-		if code == 404 then
-			-- Book not found on server, skip cover upload
-			logger.dbg("Crossbill: Book not found on server, skipping cover upload")
+		-- Check if server metadata is available and if cover is needed
+		if not server_metadata then
+			logger.dbg("Crossbill: No server metadata, skipping cover upload")
 			return
 		end
 
-		if not metadata then
-			logger.warn("Crossbill: Failed to fetch book metadata, skipping cover upload")
-			return
-		end
-
-		if metadata.hasCover then
+		if server_metadata.hasCover then
 			logger.dbg("Crossbill: Server already has cover, skipping upload")
 			return
 		end
@@ -225,6 +245,63 @@ function CrossbillSync:uploadCoverImage(client_book_id, book_metadata)
 
 	if not success then
 		logger.err("Crossbill: Error uploading cover:", err)
+	end
+end
+
+--- Upload EPUB file for a book if server doesn't have one
+-- @param client_book_id string The client book ID (hash of title|author)
+-- @param book_metadata BookMetadata instance
+-- @param server_metadata table|nil Server metadata from getServerBookMetadata
+function CrossbillSync:uploadEpub(client_book_id, book_metadata, server_metadata)
+	local success, err = pcall(function()
+		-- Check if server metadata is available and if EPUB is needed
+		if not server_metadata then
+			logger.dbg("Crossbill: No server metadata, skipping EPUB upload")
+			return
+		end
+
+		if server_metadata.hasEpub then
+			logger.dbg("Crossbill: Server already has EPUB, skipping upload")
+			return
+		end
+
+		-- Check if document is an EPUB file
+		local doc_path = book_metadata:getDocPath()
+		if not doc_path or not doc_path:match("%.epub$") then
+			logger.dbg("Crossbill: Document is not an EPUB file, skipping upload")
+			return
+		end
+
+		-- Read the EPUB file
+		local epub_file = io.open(doc_path, "rb")
+		if not epub_file then
+			logger.err("Crossbill: Failed to open EPUB file for reading")
+			return
+		end
+
+		local epub_data = epub_file:read("*all")
+		epub_file:close()
+
+		if not epub_data or epub_data == "" then
+			logger.err("Crossbill: Failed to read EPUB data")
+			return
+		end
+
+		-- Extract filename from path
+		local filename = doc_path:match("^.+/(.+)$") or "document.epub"
+
+		logger.dbg("Crossbill: Uploading EPUB file:", filename, "size:", #epub_data, "bytes")
+
+		-- Upload EPUB
+		local upload_success, upload_err = self.api_client:uploadEpub(client_book_id, epub_data, filename)
+
+		if not upload_success then
+			logger.warn("Crossbill: Failed to upload EPUB:", upload_err)
+		end
+	end)
+
+	if not success then
+		logger.err("Crossbill: Error uploading EPUB:", err)
 	end
 end
 
