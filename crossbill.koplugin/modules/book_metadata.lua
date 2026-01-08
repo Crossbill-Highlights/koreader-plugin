@@ -12,6 +12,7 @@ Extracts book metadata from KOReader documents including:
 local DocSettings = require("docsettings")
 local FileManagerBookInfo = require("apps/filemanager/filemanagerbookinfo")
 local logger = require("logger")
+local md5 = require("ffi/sha2").md5
 
 local BookMetadata = {}
 BookMetadata.__index = BookMetadata
@@ -49,6 +50,16 @@ local function extractISBN(identifiers)
 		logger.dbg("Crossbill Metadata: No ISBN found in identifiers:", identifiers)
 	end
 	return isbn
+end
+
+--- Generate a client book ID from title and author
+-- Creates a stable, unique identifier for the book
+-- @param title string Book title
+-- @param author string|nil Book author
+-- @return string MD5 hash of title and author
+local function generateClientBookId(title, author)
+	local input = (title or "") .. "|" .. (author or "")
+	return md5(input)
 end
 
 --- Parse keywords string into array
@@ -122,11 +133,14 @@ function BookMetadata:extractBookData()
 
 	-- Build book data
 	local title = book_props.display_title or book_props.title or getFilename(doc_path)
-	logger.dbg("Crossbill Metadata: Syncing book:", title)
+	local author = book_props.authors or nil
+	local client_book_id = generateClientBookId(title, author)
+	logger.dbg("Crossbill Metadata: Syncing book:", title, "client_book_id:", client_book_id)
 
 	return {
 		title = title,
-		author = book_props.authors or nil,
+		author = author,
+		client_book_id = client_book_id,
 		isbn = isbn,
 		description = metadata_props.description or nil,
 		language = language,
