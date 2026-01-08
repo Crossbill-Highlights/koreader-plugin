@@ -72,7 +72,7 @@ end
 --- Get book metadata from server by client_book_id
 -- @param client_book_id string The client-side book ID (hash of title|author)
 -- @return number|nil HTTP status code
--- @return table|nil Response data containing book_id, bookname, author, hasCover, hasEpub
+-- @return table|nil Response data containing book_id, bookname, author, has_cover, has_epub
 -- @return string|nil Error message
 function ApiClient:getBookMetadata(client_book_id)
 	local token, auth_err = self.auth:getValidToken()

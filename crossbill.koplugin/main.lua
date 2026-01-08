@@ -190,7 +190,7 @@ end
 
 --- Fetch book metadata from the server
 -- @param client_book_id string The client book ID (hash of title|author)
--- @return table|nil Server metadata containing hasCover, hasEpub, etc. or nil if not found
+-- @return table|nil Server metadata containing has_cover, has_epub, etc. or nil if not found
 function CrossbillSync:getServerBookMetadata(client_book_id)
 	local code, metadata, _ = self.api_client:getBookMetadata(client_book_id)
 
@@ -219,7 +219,7 @@ function CrossbillSync:uploadCoverImage(client_book_id, book_metadata, server_me
 			return
 		end
 
-		if server_metadata.hasCover then
+		if server_metadata.has_cover then
 			logger.dbg("Crossbill: Server already has cover, skipping upload")
 			return
 		end
@@ -260,7 +260,7 @@ function CrossbillSync:uploadEpub(client_book_id, book_metadata, server_metadata
 			return
 		end
 
-		if server_metadata.hasEpub then
+		if server_metadata.has_epub then
 			logger.dbg("Crossbill: Server already has EPUB, skipping upload")
 			return
 		end
