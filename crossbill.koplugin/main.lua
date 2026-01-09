@@ -336,9 +336,8 @@ function CrossbillSync:uploadReadingSessions()
 		return false, "No document path", nil
 	end
 
-	-- Get book hash using the same method as SessionTracker
-	local md5 = require("ffi/sha2").md5
-	local book_hash = md5(doc_path)
+	-- Get book hash using SessionTracker's method for consistency
+	local book_hash = self.session_tracker:getBookHash(doc_path)
 
 	-- Get unsynced sessions for this book only
 	local sessions = self.session_tracker:getUnsyncedSessionsForBook(book_hash)

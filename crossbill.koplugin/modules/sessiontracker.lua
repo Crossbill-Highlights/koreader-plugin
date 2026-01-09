@@ -111,9 +111,11 @@ function SessionTracker:close()
 end
 
 --- Get MD5 hash of a file path for consistent book identification
+-- This is a public method that can be used by other modules to ensure
+-- consistent book hash calculation across the plugin.
 -- @param file_path string The file path to hash
 -- @return string MD5 hash
-function SessionTracker:_getBookHash(file_path)
+function SessionTracker:getBookHash(file_path)
 	local md5 = require("ffi/sha2").md5
 	return md5(file_path)
 end
@@ -264,7 +266,7 @@ function SessionTracker:startSession(document, ui)
 
 	self.current_session = {
 		book_file = file_path,
-		book_hash = self:_getBookHash(file_path),
+		book_hash = self:getBookHash(file_path),
 		book_title = book_title,
 		book_author = book_author,
 		start_time = os.time(),
