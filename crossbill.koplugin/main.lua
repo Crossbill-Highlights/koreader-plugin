@@ -16,6 +16,7 @@ local ApiClient = require("modules/api_client")
 local HighlightExtractor = require("modules/highlight_extractor")
 local BookMetadata = require("modules/book_metadata")
 local SessionTracker = require("modules/sessiontracker")
+local FileUploader = require("modules/file_uploader")
 local UI = require("modules/ui")
 
 local CrossbillSync = WidgetContainer:extend({
@@ -33,6 +34,9 @@ function CrossbillSync:init()
 
 	-- Initialize API client with settings and auth
 	self.api_client = ApiClient:new(self.settings, self.auth)
+
+	-- Initialize file uploader with API client
+	self.file_uploader = FileUploader:new(self.api_client)
 
 	-- Initialize session tracker with settings
 	self.session_tracker = SessionTracker:new(self.settings)
@@ -180,11 +184,17 @@ function CrossbillSync:doSync(is_autosync)
 	-- Fetch server metadata once for cover and EPUB uploads
 	local server_metadata = self:getServerBookMetadata(book_data.client_book_id)
 
-	-- Upload cover image if available
-	self:uploadCoverImage(book_data.client_book_id, book_metadata, server_metadata)
+	-- Upload cover image if available (errors are logged but don't fail sync)
+	local cover_ok, cover_err = self.file_uploader:uploadCover(book_data.client_book_id, book_metadata, server_metadata)
+	if not cover_ok then
+		logger.warn("Crossbill: Cover upload issue:", cover_err)
+	end
 
-	-- Upload EPUB file if available
-	self:uploadEpub(book_data.client_book_id, book_metadata, server_metadata)
+	-- Upload EPUB file if available (errors are logged but don't fail sync)
+	local epub_ok, epub_err = self.file_uploader:uploadEpub(book_data.client_book_id, book_metadata, server_metadata)
+	if not epub_ok then
+		logger.warn("Crossbill: EPUB upload issue:", epub_err)
+	end
 
 	-- Show success message for manual syncs
 	if not is_autosync then
@@ -211,104 +221,6 @@ function CrossbillSync:getServerBookMetadata(client_book_id)
 	end
 
 	return metadata
-end
-
---- Upload cover image for a book if server doesn't have one
--- @param client_book_id string The client book ID (hash of title|author)
--- @param book_metadata BookMetadata instance
--- @param server_metadata table|nil Server metadata from getServerBookMetadata
-function CrossbillSync:uploadCoverImage(client_book_id, book_metadata, server_metadata)
-	local success, err = pcall(function()
-		-- Check if server metadata is available and if cover is needed
-		if not server_metadata then
-			logger.dbg("Crossbill: No server metadata, skipping cover upload")
-			return
-		end
-
-		if server_metadata.has_cover then
-			logger.dbg("Crossbill: Server already has cover, skipping upload")
-			return
-		end
-
-		-- Server doesn't have cover, extract and upload it
-		local tmp_path, cover_data, cover_image = book_metadata:extractCoverToFile(client_book_id)
-
-		if not cover_data then
-			return
-		end
-
-		-- Upload cover using client_book_id
-		self.api_client:uploadCover(client_book_id, cover_data)
-
-		-- Cleanup
-		if cover_image then
-			cover_image:free()
-		end
-		if tmp_path then
-			os.remove(tmp_path)
-		end
-	end)
-
-	if not success then
-		logger.err("Crossbill: Error uploading cover:", err)
-	end
-end
-
---- Upload EPUB file for a book if server doesn't have one
--- @param client_book_id string The client book ID (hash of title|author)
--- @param book_metadata BookMetadata instance
--- @param server_metadata table|nil Server metadata from getServerBookMetadata
-function CrossbillSync:uploadEpub(client_book_id, book_metadata, server_metadata)
-	local success, err = pcall(function()
-		-- Check if server metadata is available and if EPUB is needed
-		if not server_metadata then
-			logger.dbg("Crossbill: No server metadata, skipping EPUB upload")
-			return
-		end
-
-		if server_metadata.has_epub then
-			logger.dbg("Crossbill: Server already has EPUB, skipping upload")
-			return
-		end
-
-		-- Check if document is an EPUB file
-		local doc_path = book_metadata:getDocPath()
-		if not doc_path or not doc_path:match("%.epub$") then
-			logger.dbg("Crossbill: Document is not an EPUB file, skipping upload")
-			return
-		end
-
-		-- Read the EPUB file
-		local epub_file = io.open(doc_path, "rb")
-		if not epub_file then
-			logger.err("Crossbill: Failed to open EPUB file for reading")
-			return
-		end
-
-		local epub_data = epub_file:read("*all")
-		epub_file:close()
-
-		if not epub_data or epub_data == "" then
-			logger.err("Crossbill: Failed to read EPUB data")
-			return
-		end
-
-		-- Extract filename from path
-		local filename = doc_path:match("^.+/(.+)$") or "document.epub"
-
-		logger.dbg("Crossbill: Uploading EPUB file:", filename, "size:", #epub_data, "bytes")
-
-		-- Upload EPUB
-		local upload_success, _, upload_err = self.api_client:uploadEpub(client_book_id, epub_data, filename)
-
-		if not upload_success then
-			logger.warn("Crossbill: Failed to upload EPUB:", upload_err)
-		end
-	end)
-
-	if not success then
-		logger.err("Crossbill: Error uploading EPUB:", err)
-	end
 end
 
 --- Upload unsynced reading sessions to server for the current book
