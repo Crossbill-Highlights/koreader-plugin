@@ -30,6 +30,8 @@ local function formatHighlight(annotation)
 		note = annotation.note or nil,
 		datetime = annotation.datetime or "",
 		page = annotation.pageno or annotation.page,
+		start_xpoint = annotation.pos0 or nil,
+		end_xpoint = annotation.pos1 or nil,
 		chapter = annotation.chapter or nil,
 	}
 end
