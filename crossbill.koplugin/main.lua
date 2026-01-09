@@ -63,7 +63,7 @@ function CrossbillSync:addToMainMenu(menu_items)
 		end,
 		on_toggle_session_tracking = function()
 			-- End current session before disabling tracking
-			if self.settings:isSessionTrackingEnabled() and self.session_tracker then
+			if self:isSessionTrackingActive() then
 				self.session_tracker:endSession(self.ui.document, self.ui, "tracking_disabled")
 			end
 			local enabled = self.settings:toggleSessionTracking()
@@ -82,6 +82,12 @@ end
 --- Show server configuration dialog
 function CrossbillSync:configureServer()
 	UI.showConfigureServerDialog(self.settings)
+end
+
+--- Check if session tracking is currently active
+-- @return boolean True if session tracking is enabled and tracker is available
+function CrossbillSync:isSessionTrackingActive()
+	return self.settings:isSessionTrackingEnabled() and self.session_tracker ~= nil
 end
 
 --- Sync the currently open book's highlights
@@ -310,7 +316,7 @@ end
 -- @return number Number of sessions synced (or error message on failure)
 -- @return number|nil book_id from server response (nil on failure or no sessions)
 function CrossbillSync:uploadReadingSessions()
-	if not self.session_tracker or not self.settings:isSessionTrackingEnabled() then
+	if not self:isSessionTrackingActive() then
 		logger.dbg("Crossbill: Session tracking not enabled")
 		return true, 0, nil
 	end
@@ -374,7 +380,7 @@ end
 
 --- Called when document is ready for reading
 function CrossbillSync:onReaderReady()
-	if self.settings:isSessionTrackingEnabled() and self.session_tracker then
+	if self:isSessionTrackingActive() then
 		self.session_tracker:startSession(self.ui.document, self.ui)
 	end
 	return false
@@ -382,7 +388,7 @@ end
 
 --- Called on every page update
 function CrossbillSync:onPageUpdate(pageno)
-	if self.settings:isSessionTrackingEnabled() and self.session_tracker then
+	if self:isSessionTrackingActive() then
 		self.session_tracker:updatePosition(self.ui.document, self.ui, pageno)
 	end
 	return false
@@ -390,7 +396,7 @@ end
 
 --- Called when device resumes from sleep
 function CrossbillSync:onResume()
-	if self.settings:isSessionTrackingEnabled() and self.ui.document and self.session_tracker then
+	if self:isSessionTrackingActive() and self.ui.document then
 		self.session_tracker:startSession(self.ui.document, self.ui)
 	end
 	return false
@@ -398,7 +404,7 @@ end
 
 --- Called when document is closed
 function CrossbillSync:onCloseDocument()
-	if self.settings:isSessionTrackingEnabled() and self.session_tracker then
+	if self:isSessionTrackingActive() then
 		self.session_tracker:endSession(self.ui.document, self.ui, "document_close")
 		self:trySessionSync()
 	end
@@ -407,7 +413,7 @@ end
 
 --- Called when device goes to sleep/suspend
 function CrossbillSync:onSuspend()
-	if self.settings:isSessionTrackingEnabled() and self.session_tracker then
+	if self:isSessionTrackingActive() then
 		self.session_tracker:endSession(self.ui.document, self.ui, "suspend")
 	end
 	if self.settings:isAutosyncEnabled() then
@@ -422,7 +428,7 @@ end
 
 --- Called when KOReader exits
 function CrossbillSync:onExit()
-	if self.settings:isSessionTrackingEnabled() and self.session_tracker then
+	if self:isSessionTrackingActive() then
 		self.session_tracker:endSession(self.ui.document, self.ui, "app_exit")
 	end
 	if self.settings:isAutosyncEnabled() then
