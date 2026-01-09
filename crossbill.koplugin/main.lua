@@ -336,11 +336,11 @@ function CrossbillSync:uploadReadingSessions()
 		return false, "No document path", nil
 	end
 
-	-- Get book hash using SessionTracker's method for consistency
-	local book_hash = self.session_tracker:getBookHash(doc_path)
+	-- Get book file hash using SessionTracker's method for consistency
+	local book_file_hash = self.session_tracker:getBookFileHash(doc_path)
 
 	-- Get unsynced sessions for this book only
-	local sessions = self.session_tracker:getUnsyncedSessionsForBook(book_hash)
+	local sessions = self.session_tracker:getUnsyncedSessionsForBook(book_file_hash)
 	if #sessions == 0 then
 		logger.dbg("Crossbill: No reading sessions to sync for current book")
 		return true, 0, nil

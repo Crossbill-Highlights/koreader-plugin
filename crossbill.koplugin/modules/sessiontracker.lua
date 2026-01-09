@@ -114,8 +114,8 @@ end
 -- This is a public method that can be used by other modules to ensure
 -- consistent book hash calculation across the plugin.
 -- @param file_path string The file path to hash
--- @return string MD5 hash
-function SessionTracker:getBookHash(file_path)
+-- @return string MD5 hash of the file path
+function SessionTracker:getBookFileHash(file_path)
 	local md5 = require("ffi/sha2").md5
 	return md5(file_path)
 end
@@ -266,7 +266,7 @@ function SessionTracker:startSession(document, ui)
 
 	self.current_session = {
 		book_file = file_path,
-		book_hash = self:getBookHash(file_path),
+		book_hash = self:getBookFileHash(file_path),
 		book_title = book_title,
 		book_author = book_author,
 		start_time = os.time(),
@@ -428,14 +428,14 @@ function SessionTracker:markSessionsSynced(session_ids)
 end
 
 --- Get unsynced sessions for a specific book
--- @param book_hash string MD5 hash of the book file path
+-- @param book_file_hash string MD5 hash of the book file path
 -- @return table Array of session records for API upload
-function SessionTracker:getUnsyncedSessionsForBook(book_hash)
+function SessionTracker:getUnsyncedSessionsForBook(book_file_hash)
 	if not self._initialized or not self.db then
 		return {}
 	end
 
-	if not book_hash then
+	if not book_file_hash then
 		return {}
 	end
 
@@ -452,7 +452,7 @@ function SessionTracker:getUnsyncedSessionsForBook(book_hash)
             ORDER BY s.start_time ASC
         ]])
 
-		stmt:bind(book_hash)
+		stmt:bind(book_file_hash)
 
 		for row in stmt:rows() do
 			table.insert(sessions, {
@@ -485,9 +485,9 @@ function SessionTracker:getUnsyncedSessionsForBook(book_hash)
 end
 
 --- Get sessions for a specific book
--- @param book_hash string MD5 hash of the book file path
+-- @param book_file_hash string MD5 hash of the book file path
 -- @return table Array of session records
-function SessionTracker:getSessionsForBook(book_hash)
+function SessionTracker:getSessionsForBook(book_file_hash)
 	if not self._initialized or not self.db then
 		return {}
 	end
@@ -505,7 +505,7 @@ function SessionTracker:getSessionsForBook(book_hash)
             ORDER BY start_time DESC
         ]])
 
-		stmt:bind(book_hash)
+		stmt:bind(book_file_hash)
 
 		for row in stmt:rows() do
 			table.insert(sessions, {
