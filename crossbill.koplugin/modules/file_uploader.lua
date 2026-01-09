@@ -29,7 +29,6 @@ end
 -- @return boolean Success status
 -- @return string|nil Error message
 function FileUploader:uploadCover(client_book_id, book_metadata, server_metadata)
-	-- Check if server metadata is available and if cover is needed
 	if not server_metadata then
 		logger.dbg("Crossbill FileUploader: No server metadata, skipping cover upload")
 		return true, nil
@@ -40,7 +39,6 @@ function FileUploader:uploadCover(client_book_id, book_metadata, server_metadata
 		return true, nil
 	end
 
-	-- Server doesn't have cover, extract and upload it
 	local tmp_path, cover_data, cover_image = book_metadata:extractCoverToFile(client_book_id)
 
 	if not cover_data then
@@ -48,10 +46,8 @@ function FileUploader:uploadCover(client_book_id, book_metadata, server_metadata
 		return true, nil
 	end
 
-	-- Upload cover using client_book_id
 	local success, _, err = self.api_client:uploadCover(client_book_id, cover_data)
 
-	-- Cleanup
 	if cover_image then
 		cover_image:free()
 	end
@@ -74,7 +70,6 @@ end
 -- @return boolean Success status
 -- @return string|nil Error message
 function FileUploader:uploadEpub(client_book_id, book_metadata, server_metadata)
-	-- Check if server metadata is available and if EPUB is needed
 	if not server_metadata then
 		logger.dbg("Crossbill FileUploader: No server metadata, skipping EPUB upload")
 		return true, nil
@@ -85,14 +80,12 @@ function FileUploader:uploadEpub(client_book_id, book_metadata, server_metadata)
 		return true, nil
 	end
 
-	-- Check if document is an EPUB file
 	local doc_path = book_metadata:getDocPath()
 	if not doc_path or not doc_path:match("%.epub$") then
 		logger.dbg("Crossbill FileUploader: Document is not an EPUB file, skipping upload")
 		return true, nil
 	end
 
-	-- Read the EPUB file
 	local epub_file = io.open(doc_path, "rb")
 	if not epub_file then
 		logger.err("Crossbill FileUploader: Failed to open EPUB file for reading")
@@ -107,7 +100,6 @@ function FileUploader:uploadEpub(client_book_id, book_metadata, server_metadata)
 		return false, "Failed to read EPUB data"
 	end
 
-	-- Extract filename from path
 	local filename = doc_path:match("^.+/(.+)$") or "document.epub"
 
 	logger.dbg("Crossbill FileUploader: Uploading EPUB file:", filename, "size:", #epub_data, "bytes")

@@ -113,25 +113,20 @@ function BookMetadata:extractBookData()
 	local metadata_props = meta.metadata_props
 	local doc_settings = meta.doc_settings
 
-	-- Extract ISBN from identifiers
 	local isbn = extractISBN(metadata_props.identifiers)
 
-	-- Extract language
 	local language = metadata_props.language or nil
 	if language then
 		logger.dbg("Crossbill Metadata: Extracted language:", language)
 	end
 
-	-- Extract page count
 	local page_count = doc_settings:readSetting("doc_pages") or nil
 	if page_count then
 		logger.dbg("Crossbill Metadata: Extracted page count:", page_count)
 	end
 
-	-- Parse keywords into array
 	local keywords = parseKeywords(metadata_props.keywords)
 
-	-- Build book data
 	local title = book_props.display_title or book_props.title or getFilename(doc_path)
 	local author = book_props.authors or nil
 	local client_book_id = generateClientBookId(title, author)

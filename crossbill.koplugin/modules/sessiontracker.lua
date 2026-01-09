@@ -111,8 +111,6 @@ function SessionTracker:close()
 end
 
 --- Get MD5 hash of a file path for consistent book identification
--- This is a public method that can be used by other modules to ensure
--- consistent book hash calculation across the plugin.
 -- @param file_path string The file path to hash
 -- @return string MD5 hash of the file path
 function SessionTracker:getBookFileHash(file_path)

@@ -42,12 +42,7 @@ function CrossbillSync:init()
 	self.session_tracker:init(DataStorage:getSettingsDir())
 
 	-- Initialize sync service with all dependencies
-	self.sync_service = SyncService:new(
-		self.api_client,
-		self.file_uploader,
-		self.session_tracker,
-		self.settings
-	)
+	self.sync_service = SyncService:new(self.api_client, self.file_uploader, self.session_tracker, self.settings)
 
 	-- Register menu
 	self.ui.menu:registerToMainMenu(self)
@@ -101,7 +96,7 @@ function CrossbillSync:isSessionTrackingActive()
 	return self.settings:isSessionTrackingEnabled() and self.session_tracker ~= nil
 end
 
---- Sync the currently open book's highlights
+--- Sync the currently open book's data
 -- @param is_autosync boolean If true, run in silent mode (no UI feedback)
 function CrossbillSync:syncCurrentBook(is_autosync)
 	local callback = function()
@@ -148,16 +143,13 @@ end
 --- Execute the sync workflow
 -- @param is_autosync boolean If true, run in silent mode
 function CrossbillSync:doSync(is_autosync)
-	-- Delegate to SyncService for the actual sync workflow
 	local result = self.sync_service:syncBook(self.ui)
 
-	if not result.success then
-		if not is_autosync then
-			if result.error and result.error:match("^Authentication") then
-				UI.showAuthError(result.error)
-			else
-				UI.showSyncFailed(result.error)
-			end
+	if not result.success and not is_autosync then
+		if result.error and result.error:match("^Authentication") then
+			UI.showAuthError(result.error)
+		else
+			UI.showSyncFailed(result.error)
 		end
 		return
 	end
@@ -170,6 +162,7 @@ end
 
 --- Try to sync reading sessions opportunistically (only if already online)
 function CrossbillSync:trySessionSync()
+	-- TODO: This is a weird abstraction level for this operation. Should we instead do this kind of check in sync service...?
 	local NetworkMgr = require("ui/network/manager")
 	if NetworkMgr:isOnline() then
 		self.sync_service:uploadReadingSessionsIfOnline(self.ui)
