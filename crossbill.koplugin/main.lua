@@ -13,10 +13,9 @@ local Settings = require("modules/settings")
 local Network = require("modules/network")
 local Auth = require("modules/auth")
 local ApiClient = require("modules/api_client")
-local HighlightExtractor = require("modules/highlight_extractor")
-local BookMetadata = require("modules/book_metadata")
 local SessionTracker = require("modules/sessiontracker")
 local FileUploader = require("modules/file_uploader")
+local SyncService = require("modules/sync_service")
 local UI = require("modules/ui")
 
 local CrossbillSync = WidgetContainer:extend({
@@ -41,6 +40,14 @@ function CrossbillSync:init()
 	-- Initialize session tracker with settings
 	self.session_tracker = SessionTracker:new(self.settings)
 	self.session_tracker:init(DataStorage:getSettingsDir())
+
+	-- Initialize sync service with all dependencies
+	self.sync_service = SyncService:new(
+		self.api_client,
+		self.file_uploader,
+		self.session_tracker,
+		self.settings
+	)
 
 	-- Register menu
 	self.ui.menu:registerToMainMenu(self)
@@ -141,148 +148,31 @@ end
 --- Execute the sync workflow
 -- @param is_autosync boolean If true, run in silent mode
 function CrossbillSync:doSync(is_autosync)
-	-- Extract book metadata
-	local book_metadata = BookMetadata:new(self.ui)
-	local book_data = book_metadata:extractBookData()
-	local doc_path = book_metadata:getDocPath()
+	-- Delegate to SyncService for the actual sync workflow
+	local result = self.sync_service:syncBook(self.ui)
 
-	-- Extract highlights
-	local highlight_extractor = HighlightExtractor:new(self.ui)
-	local highlights = highlight_extractor:getHighlights(doc_path)
-
-	-- Track highlight upload response for success message
-	local highlights_response = nil
-
-	if highlights and #highlights > 0 then
-		logger.dbg("Crossbill: Found", #highlights, "highlights")
-
-		-- Add chapter numbers to highlights
-		highlight_extractor:addChapterNumbers(highlights)
-
-		-- Upload highlights to server
-		local upload_success, response, err = self.api_client:uploadHighlights(book_data, highlights)
-
-		if not upload_success then
-			if not is_autosync then
-				if err and err:match("^Authentication") then
-					UI.showAuthError(err)
-				else
-					UI.showSyncFailed(err)
-				end
+	if not result.success then
+		if not is_autosync then
+			if result.error and result.error:match("^Authentication") then
+				UI.showAuthError(result.error)
+			else
+				UI.showSyncFailed(result.error)
 			end
-			return
 		end
-
-		highlights_response = response
-	end
-
-	-- TODO: Add proper error handling and UI notifications here...
-
-	-- Upload reading sessions
-	self:uploadReadingSessions()
-
-	-- Fetch server metadata once for cover and EPUB uploads
-	local server_metadata = self:getServerBookMetadata(book_data.client_book_id)
-
-	-- Upload cover image if available (errors are logged but don't fail sync)
-	local cover_ok, cover_err = self.file_uploader:uploadCover(book_data.client_book_id, book_metadata, server_metadata)
-	if not cover_ok then
-		logger.warn("Crossbill: Cover upload issue:", cover_err)
-	end
-
-	-- Upload EPUB file if available (errors are logged but don't fail sync)
-	local epub_ok, epub_err = self.file_uploader:uploadEpub(book_data.client_book_id, book_metadata, server_metadata)
-	if not epub_ok then
-		logger.warn("Crossbill: EPUB upload issue:", epub_err)
+		return
 	end
 
 	-- Show success message for manual syncs
 	if not is_autosync then
-		local created = highlights_response and highlights_response.highlights_created or 0
-		local skipped = highlights_response and highlights_response.highlights_skipped or 0
-		UI.showSyncSuccess(created, skipped)
+		UI.showSyncSuccess(result.highlights_created, result.highlights_skipped)
 	end
-end
-
---- Fetch book metadata from the server
--- @param client_book_id string The client book ID (hash of title|author)
--- @return table|nil Server metadata containing has_cover, has_epub, etc. or nil if not found
-function CrossbillSync:getServerBookMetadata(client_book_id)
-	local code, metadata, _ = self.api_client:getBookMetadata(client_book_id)
-
-	if code == 404 then
-		logger.dbg("Crossbill: Book not found on server")
-		return nil
-	end
-
-	if not metadata then
-		logger.warn("Crossbill: Failed to fetch book metadata from server")
-		return nil
-	end
-
-	return metadata
-end
-
---- Upload unsynced reading sessions to server for the current book
--- @return boolean Success status
--- @return number Number of sessions synced (or error message on failure)
--- @return number|nil book_id from server response (nil on failure or no sessions)
-function CrossbillSync:uploadReadingSessions()
-	if not self:isSessionTrackingActive() then
-		logger.dbg("Crossbill: Session tracking not enabled")
-		return true, 0, nil
-	end
-
-	if not self.ui.document then
-		logger.dbg("Crossbill: No document available for session sync")
-		return true, 0, nil
-	end
-
-	-- Get current book's metadata and hash
-	local book_metadata = BookMetadata:new(self.ui)
-	local book_data = book_metadata:extractBookData()
-	local doc_path = book_metadata:getDocPath()
-
-	if not doc_path then
-		logger.warn("Crossbill: Cannot get document path for session sync")
-		return false, "No document path", nil
-	end
-
-	-- Get book file hash using SessionTracker's method for consistency
-	local book_file_hash = self.session_tracker:getBookFileHash(doc_path)
-
-	-- Get unsynced sessions for this book only
-	local sessions = self.session_tracker:getUnsyncedSessionsForBook(book_file_hash)
-	if #sessions == 0 then
-		logger.dbg("Crossbill: No reading sessions to sync for current book")
-		return true, 0, nil
-	end
-
-	logger.info("Crossbill: Found", #sessions, "unsynced reading sessions for current book")
-
-	local success, response, err = self.api_client:uploadReadingSessions(book_data, sessions)
-	if success and response then
-		-- Mark all sessions as synced (all-or-nothing API)
-		local session_ids = {}
-		for _, session in ipairs(sessions) do
-			table.insert(session_ids, session.id)
-		end
-		self.session_tracker:markSessionsSynced(session_ids)
-
-		logger.info("Crossbill: Synced", #sessions, "reading sessions")
-		return true, #sessions, response.book_id
-	end
-
-	-- On failure, sessions remain unsynced for retry
-	logger.warn("Crossbill: Failed to sync reading sessions:", err)
-	return false, err, nil
 end
 
 --- Try to sync reading sessions opportunistically (only if already online)
 function CrossbillSync:trySessionSync()
 	local NetworkMgr = require("ui/network/manager")
 	if NetworkMgr:isOnline() then
-		self:uploadReadingSessions()
+		self.sync_service:uploadReadingSessionsIfOnline(self.ui)
 	end
 	-- If offline, sessions remain in DB for next sync opportunity
 end
