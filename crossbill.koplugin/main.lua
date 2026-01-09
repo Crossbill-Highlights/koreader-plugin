@@ -299,7 +299,7 @@ function CrossbillSync:uploadEpub(client_book_id, book_metadata, server_metadata
 		logger.dbg("Crossbill: Uploading EPUB file:", filename, "size:", #epub_data, "bytes")
 
 		-- Upload EPUB
-		local upload_success, upload_err = self.api_client:uploadEpub(client_book_id, epub_data, filename)
+		local upload_success, _, upload_err = self.api_client:uploadEpub(client_book_id, epub_data, filename)
 
 		if not upload_success then
 			logger.warn("Crossbill: Failed to upload EPUB:", upload_err)

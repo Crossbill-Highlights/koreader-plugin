@@ -106,11 +106,12 @@ end
 -- @param client_book_id string The client-side book ID (hash of title|author)
 -- @param cover_data string The cover image binary data
 -- @return boolean Success status
+-- @return nil Response data (always nil for this endpoint)
 -- @return string|nil Error message
 function ApiClient:uploadCover(client_book_id, cover_data)
 	local token, auth_err = self.auth:getValidToken()
 	if not token then
-		return false, auth_err or "Authentication failed"
+		return false, nil, auth_err or "Authentication failed"
 	end
 
 	local api_url = self:getApiUrl() .. "/ereader/books/" .. client_book_id .. "/cover"
@@ -129,15 +130,15 @@ function ApiClient:uploadCover(client_book_id, cover_data)
 
 	if not code then
 		logger.err("Crossbill API: Network error uploading cover:", err)
-		return false, err or "Network error"
+		return false, nil, err or "Network error"
 	end
 
 	if code == 200 then
 		logger.info("Crossbill API: Cover uploaded successfully for book", client_book_id)
-		return true, nil
+		return true, nil, nil
 	else
 		logger.warn("Crossbill API: Cover upload failed with code:", code)
-		return false, "Upload failed: " .. tostring(code)
+		return false, nil, "Upload failed: " .. tostring(code)
 	end
 end
 
@@ -146,11 +147,12 @@ end
 -- @param epub_data string The EPUB file binary data
 -- @param filename string The original EPUB filename
 -- @return boolean Success status
+-- @return nil Response data (always nil for this endpoint)
 -- @return string|nil Error message
 function ApiClient:uploadEpub(client_book_id, epub_data, filename)
 	local token, auth_err = self.auth:getValidToken()
 	if not token then
-		return false, auth_err or "Authentication failed"
+		return false, nil, auth_err or "Authentication failed"
 	end
 
 	local api_url = self:getApiUrl() .. "/ereader/books/" .. client_book_id .. "/epub"
@@ -169,15 +171,15 @@ function ApiClient:uploadEpub(client_book_id, epub_data, filename)
 
 	if not code then
 		logger.err("Crossbill API: Network error uploading EPUB:", err)
-		return false, err or "Network error"
+		return false, nil, err or "Network error"
 	end
 
 	if code == 200 then
 		logger.info("Crossbill API: EPUB uploaded successfully for book", client_book_id)
-		return true, nil
+		return true, nil, nil
 	else
 		logger.warn("Crossbill API: EPUB upload failed with code:", code)
-		return false, "Upload failed: " .. tostring(code)
+		return false, nil, "Upload failed: " .. tostring(code)
 	end
 end
 
