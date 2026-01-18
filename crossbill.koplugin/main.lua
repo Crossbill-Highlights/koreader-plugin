@@ -160,16 +160,6 @@ function CrossbillSync:doSync(is_autosync)
 	end
 end
 
---- Try to sync reading sessions opportunistically (only if already online)
-function CrossbillSync:trySessionSync()
-	-- TODO: This is a weird abstraction level for this operation. Should we instead do this kind of check in sync service...?
-	local NetworkMgr = require("ui/network/manager")
-	if NetworkMgr:isOnline() then
-		self.sync_service:uploadReadingSessionsIfOnline(self.ui)
-	end
-	-- If offline, sessions remain in DB for next sync opportunity
-end
-
 -- Event handlers for session tracking and auto-sync
 
 --- Called when document is ready for reading
@@ -200,7 +190,6 @@ end
 function CrossbillSync:onCloseDocument()
 	if self:isSessionTrackingActive() then
 		self.session_tracker:endSession(self.ui.document, self.ui, "document_close")
-		self:trySessionSync()
 	end
 	return false
 end
@@ -214,8 +203,6 @@ function CrossbillSync:onSuspend()
 		logger.info("Crossbill: Auto-syncing on suspend")
 		self:syncCurrentBook(true)
 	else
-		-- Try opportunistic session sync even when auto-sync is disabled
-		self:trySessionSync()
 	end
 	return false
 end
@@ -228,9 +215,6 @@ function CrossbillSync:onExit()
 	if self.settings:isAutosyncEnabled() then
 		logger.info("Crossbill: Auto-syncing on exit")
 		self:syncCurrentBook(true)
-	else
-		-- Try opportunistic session sync even when auto-sync is disabled
-		self:trySessionSync()
 	end
 	-- Close database after sync attempts
 	if self.session_tracker then
