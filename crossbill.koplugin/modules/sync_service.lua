@@ -57,6 +57,23 @@ function SyncService:syncBook(ui)
 	local book_data = book_metadata:extractBookData()
 	local doc_path = book_metadata:getDocPath()
 
+	-- Fetch or create book on server
+	local server_metadata = self:_getServerBookMetadata(book_data.client_book_id)
+	if not server_metadata then
+		-- Book doesn't exist on server, create it
+		logger.info("Crossbill SyncService: Book not found on server, creating it")
+		local create_success, created_metadata, create_err = self.api_client:createBook(book_data)
+		if not create_success then
+			result.success = false
+			result.error = create_err or "Failed to create book on server"
+			return result
+		end
+		server_metadata = created_metadata
+	end
+
+	-- Upload files (cover and EPUB)
+	self:_syncFiles(book_data.client_book_id, book_metadata, server_metadata)
+
 	-- Extract and upload highlights
 	local highlight_result = self:_syncHighlights(ui, book_data, doc_path)
 	if not highlight_result.success then
@@ -70,9 +87,6 @@ function SyncService:syncBook(ui)
 	-- Upload reading sessions
 	local session_result = self:_syncReadingSessions(ui, book_data, doc_path)
 	result.sessions_synced = session_result.synced
-
-	-- Upload files (cover and EPUB)
-	self:_syncFiles(book_data.client_book_id, book_metadata)
 
 	return result
 end
@@ -170,10 +184,8 @@ end
 --- Sync files (cover and EPUB) for the current book
 -- @param client_book_id string The client book ID
 -- @param book_metadata BookMetadata instance
-function SyncService:_syncFiles(client_book_id, book_metadata)
-	-- Fetch server metadata once for cover and EPUB uploads
-	local server_metadata = self:_getServerBookMetadata(client_book_id)
-
+-- @param server_metadata table Server metadata containing has_cover, has_epub, etc.
+function SyncService:_syncFiles(client_book_id, book_metadata, server_metadata)
 	-- Upload cover image if available (errors are logged but don't fail sync)
 	local cover_ok, cover_err = self.file_uploader:uploadCover(client_book_id, book_metadata, server_metadata)
 	if not cover_ok then
