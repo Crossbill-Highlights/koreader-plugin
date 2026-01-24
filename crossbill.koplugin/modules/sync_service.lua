@@ -75,7 +75,7 @@ function SyncService:syncBook(ui)
 	self:_syncFiles(book_data.client_book_id, book_metadata, server_metadata)
 
 	-- Extract and upload highlights
-	local highlight_result = self:_syncHighlights(ui, book_data, doc_path)
+	local highlight_result = self:_syncHighlights(ui, book_data.client_book_id, doc_path)
 	if not highlight_result.success then
 		result.success = false
 		result.error = highlight_result.error
@@ -96,7 +96,7 @@ end
 -- @param book_data table Book metadata
 -- @param doc_path string Document file path
 -- @return table Result with success, created, skipped, error
-function SyncService:_syncHighlights(ui, book_data, doc_path)
+function SyncService:_syncHighlights(ui, client_book_id, doc_path)
 	local result = { success = true, created = 0, skipped = 0, error = nil }
 
 	-- Extract highlights
@@ -114,7 +114,7 @@ function SyncService:_syncHighlights(ui, book_data, doc_path)
 	highlight_extractor:addChapterNumbers(highlights)
 
 	-- Upload highlights to server
-	local upload_success, response, err = self.api_client:uploadHighlights(book_data, highlights)
+	local upload_success, response, err = self.api_client:uploadHighlights(client_book_id, highlights)
 
 	if not upload_success then
 		result.success = false

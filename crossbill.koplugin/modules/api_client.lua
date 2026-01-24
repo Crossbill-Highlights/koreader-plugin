@@ -39,14 +39,14 @@ end
 -- @return boolean Success status
 -- @return table|nil Response data containing book_id, highlights_created, highlights_skipped
 -- @return string|nil Error message
-function ApiClient:uploadHighlights(book_data, highlights)
+function ApiClient:uploadHighlights(client_book_id, highlights)
 	local token, auth_err = self.auth:getValidToken()
 	if not token then
 		return false, nil, auth_err or "Authentication failed"
 	end
 
 	local payload = {
-		book = book_data,
+		client_book_id = client_book_id,
 		highlights = highlights,
 	}
 
