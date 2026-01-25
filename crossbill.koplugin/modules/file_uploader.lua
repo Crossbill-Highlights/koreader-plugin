@@ -75,7 +75,7 @@ function FileUploader:uploadEpub(client_book_id, book_metadata, server_metadata)
 		return true, nil
 	end
 
-	if server_metadata.has_epub then
+	if server_metadata.has_ebook then
 		logger.dbg("Crossbill FileUploader: Server already has EPUB, skipping upload")
 		return true, nil
 	end

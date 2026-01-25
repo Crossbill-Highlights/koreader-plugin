@@ -184,7 +184,7 @@ end
 --- Sync files (cover and EPUB) for the current book
 -- @param client_book_id string The client book ID
 -- @param book_metadata BookMetadata instance
--- @param server_metadata table Server metadata containing has_cover, has_epub, etc.
+-- @param server_metadata table Server metadata containing has_cover, has_ebook, etc.
 function SyncService:_syncFiles(client_book_id, book_metadata, server_metadata)
 	-- Upload cover image if available (errors are logged but don't fail sync)
 	local cover_ok, cover_err = self.file_uploader:uploadCover(client_book_id, book_metadata, server_metadata)
@@ -201,7 +201,7 @@ end
 
 --- Fetch book metadata from the server
 -- @param client_book_id string The client book ID (hash of title|author)
--- @return table|nil Server metadata containing has_cover, has_epub, etc. or nil if not found
+-- @return table|nil Server metadata containing has_cover, has_ebook, etc. or nil if not found
 function SyncService:_getServerBookMetadata(client_book_id)
 	local code, metadata, _ = self.api_client:getBookMetadata(client_book_id)
 
