@@ -85,7 +85,7 @@ function SyncService:syncBook(ui)
 	result.highlights_skipped = highlight_result.skipped
 
 	-- Upload reading sessions
-	local session_result = self:_syncReadingSessions(ui, book_data, doc_path)
+	local session_result = self:_syncReadingSessions(ui, book_data.client_book_id, doc_path)
 	result.sessions_synced = session_result.synced
 
 	return result
@@ -132,10 +132,10 @@ end
 
 --- Sync reading sessions for the current book
 -- @param ui table The KOReader UI context
--- @param book_data table Book metadata
+-- @param client_book_id client book ide
 -- @param doc_path string Document file path
 -- @return table Result with success, synced, error
-function SyncService:_syncReadingSessions(ui, book_data, doc_path)
+function SyncService:_syncReadingSessions(ui, client_book_id, doc_path)
 	local result = { success = true, synced = 0, error = nil }
 
 	if not self.session_tracker or not self.settings:isSessionTrackingEnabled() then
@@ -160,7 +160,7 @@ function SyncService:_syncReadingSessions(ui, book_data, doc_path)
 
 	logger.info("Crossbill SyncService: Found", #sessions, "unsynced reading sessions")
 
-	local success, response, err = self.api_client:uploadReadingSessions(book_data, sessions)
+	local success, response, err = self.api_client:uploadReadingSessions(client_book_id, sessions)
 	if success and response then
 		-- Mark all sessions as synced (all-or-nothing API)
 		local session_ids = {}
@@ -231,7 +231,7 @@ function SyncService:uploadReadingSessionsIfOnline(ui)
 	local book_data = book_metadata:extractBookData()
 	local doc_path = book_metadata:getDocPath()
 
-	local result = self:_syncReadingSessions(ui, book_data, doc_path)
+	local result = self:_syncReadingSessions(ui, book_data.client_book_id, doc_path)
 	return result.success, result.synced
 end
 

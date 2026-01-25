@@ -226,12 +226,12 @@ local function unixToISO8601(timestamp)
 end
 
 --- Upload reading sessions to the server for a single book
--- @param book_data table Book metadata
+-- @param client_book_id string The client-side book ID (hash of title|author)
 -- @param sessions table Array of session records from SessionTracker
 -- @return boolean Success status
 -- @return table|nil Response data (success, message, created_count, skipped_duplicate_count)
 -- @return string|nil Error message
-function ApiClient:uploadReadingSessions(book_data, sessions)
+function ApiClient:uploadReadingSessions(client_book_id, sessions)
 	local token, auth_err = self.auth:getValidToken()
 	if not token then
 		return false, nil, auth_err or "Authentication failed"
@@ -263,7 +263,7 @@ function ApiClient:uploadReadingSessions(book_data, sessions)
 	logger.info("Crossbill API: Prepared", #api_sessions, "sessions for upload")
 
 	local payload = {
-		book = book_data,
+		client_book_id = client_book_id,
 		sessions = (#api_sessions > 0) and api_sessions or empty_array,
 	}
 
