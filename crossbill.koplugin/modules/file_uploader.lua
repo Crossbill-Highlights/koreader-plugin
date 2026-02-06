@@ -75,10 +75,11 @@ function FileUploader:uploadEpub(client_book_id, book_metadata, server_metadata)
 		return true, nil
 	end
 
-	if server_metadata.has_ebook then
-		logger.dbg("Crossbill FileUploader: Server already has EPUB, skipping upload")
-		return true, nil
-	end
+	-- TODO: Do not upload the book everytime in the future
+	--if server_metadata.has_ebook then
+	--	logger.dbg("Crossbill FileUploader: Server already has EPUB, skipping upload")
+	--	return true, nil
+	--end
 
 	local doc_path = book_metadata:getDocPath()
 	if not doc_path or not doc_path:match("%.epub$") then
