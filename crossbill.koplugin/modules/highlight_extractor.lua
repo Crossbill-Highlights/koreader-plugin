@@ -33,6 +33,8 @@ local function formatHighlight(annotation)
 		start_xpoint = annotation.pos0 or nil,
 		end_xpoint = annotation.pos1 or nil,
 		chapter = annotation.chapter or nil,
+		color = annotation.color or nil,
+		drawer = annotation.drawer or nil,
 	}
 end
 
@@ -110,6 +112,8 @@ function HighlightExtractor:getHighlightsFromDisk(doc_path)
 				datetime = item.datetime or "",
 				page = item.page,
 				chapter = item.chapter or nil,
+				color = item.color or nil,
+				drawer = item.drawer or nil,
 			})
 		end
 	end
