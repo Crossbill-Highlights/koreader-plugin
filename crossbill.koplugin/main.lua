@@ -125,6 +125,11 @@ function CrossbillSync:performSync(is_autosync)
 		UI.showSyncingMessage()
 	end
 
+	-- End current session before sync so it gets included
+	if self:isSessionTrackingActive() and self.session_tracker:hasActiveSession() then
+		self.session_tracker:endSession(self.ui.document, self.ui, "manual_sync")
+	end
+
 	local success, err = pcall(function()
 		self:doSync(is_autosync)
 	end)
@@ -134,6 +139,11 @@ function CrossbillSync:performSync(is_autosync)
 		if not is_autosync then
 			UI.showSyncError(err)
 		end
+	end
+
+	-- Restart session after sync so reading continues to be tracked
+	if self:isSessionTrackingActive() and self.ui.document then
+		self.session_tracker:startSession(self.ui.document, self.ui)
 	end
 
 	-- Always clean up WiFi after sync
