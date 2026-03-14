@@ -21,25 +21,28 @@ main.lua (CrossbillSync)
     ├── Settings        - Configuration persistence via KOReader's G_reader_settings
     ├── Auth            - OAuth token management (login, refresh, caching)
     ├── ApiClient       - HTTP API communication (highlights, sessions, files)
-    ├── FileUploader    - Cover and EPUB uploads (uses ApiClient)
+    ├── FileUploader    - EPUB uploads (uses ApiClient)
     ├── SessionTracker  - SQLite-based reading session tracking
     ├── SyncService     - Orchestrates sync workflow (uses ApiClient, FileUploader, SessionTracker)
     └── UI              - KOReader dialogs and menu building
 ```
 
 **Key patterns:**
+
 - `main.lua` is the entry point, extending KOReader's `WidgetContainer`
 - All modules use constructor injection: `Module:new(dependencies)`
 - API methods return consistent 3-tuples: `success/code, data, error`
 - Network module handles WiFi lifecycle (enable before sync, disable after if we enabled it)
 
 **Data flow:**
-1. `BookMetadata` extracts title, author, ISBN, cover from document
+
+1. `BookMetadata` extracts title, author and ISBN from document
 2. `HighlightExtractor` reads annotations from memory (preferred) or disk
 3. `SyncService` coordinates upload of highlights, sessions, and files
 4. `SessionTracker` stores reading sessions in SQLite (`crossbill_sessions.sqlite3`)
 
 **Book identification:**
+
 - `client_book_id`: MD5 hash of "title|author" - used for server-side deduplication
 - `book_file_hash`: MD5 hash of file path - used for local session tracking
 

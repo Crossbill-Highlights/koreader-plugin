@@ -4,7 +4,7 @@ Sync Service Module for Crossbill Sync
 Orchestrates the complete sync workflow including:
 - Highlight extraction and upload
 - Reading session upload
-- Cover and EPUB file uploads
+- EPUB file uploads
 
 Extracted from main.lua to improve separation of concerns.
 The main plugin handles lifecycle events and UI, while this
@@ -71,7 +71,7 @@ function SyncService:syncBook(ui)
 		server_metadata = created_metadata
 	end
 
-	-- Upload files (cover and EPUB)
+	-- Upload files (EPUB)
 	self:_syncFiles(book_data.client_book_id, book_metadata, server_metadata)
 
 	-- Extract and upload highlights
@@ -181,17 +181,11 @@ function SyncService:_syncReadingSessions(ui, client_book_id, doc_path)
 	return result
 end
 
---- Sync files (cover and EPUB) for the current book
+--- Sync files (EPUB) for the current book
 -- @param client_book_id string The client book ID
 -- @param book_metadata BookMetadata instance
--- @param server_metadata table Server metadata containing has_cover, has_ebook, etc.
+-- @param server_metadata table Server metadata containing has_ebook, etc.
 function SyncService:_syncFiles(client_book_id, book_metadata, server_metadata)
-	-- Upload cover image if available (errors are logged but don't fail sync)
-	local cover_ok, cover_err = self.file_uploader:uploadCover(client_book_id, book_metadata, server_metadata)
-	if not cover_ok then
-		logger.warn("Crossbill SyncService: Cover upload issue:", cover_err)
-	end
-
 	-- Upload EPUB file if available (errors are logged but don't fail sync)
 	local epub_ok, epub_err = self.file_uploader:uploadEpub(client_book_id, book_metadata, server_metadata)
 	if not epub_ok then
@@ -201,7 +195,7 @@ end
 
 --- Fetch book metadata from the server
 -- @param client_book_id string The client book ID (hash of title|author)
--- @return table|nil Server metadata containing has_cover, has_ebook, etc. or nil if not found
+-- @return table|nil Server metadata containing has_ebook, etc. or nil if not found
 function SyncService:_getServerBookMetadata(client_book_id)
 	local code, metadata, _ = self.api_client:getBookMetadata(client_book_id)
 
