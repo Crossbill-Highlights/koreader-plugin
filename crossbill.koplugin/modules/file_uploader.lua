@@ -2,7 +2,6 @@
 File Uploader Module for Crossbill Sync
 
 Handles uploading book-related files to the Crossbill server:
-- Cover images
 - EPUB files
 
 Extracted from main.lua to improve separation of concerns.
@@ -20,47 +19,6 @@ function FileUploader:new(api_client)
 	local instance = setmetatable({}, FileUploader)
 	instance.api_client = api_client
 	return instance
-end
-
---- Upload cover image for a book if server doesn't have one
--- @param client_book_id string The client book ID (hash of title|author)
--- @param book_metadata BookMetadata instance for cover extraction
--- @param server_metadata table|nil Server metadata from getBookMetadata
--- @return boolean Success status
--- @return string|nil Error message
-function FileUploader:uploadCover(client_book_id, book_metadata, server_metadata)
-	if not server_metadata then
-		logger.dbg("Crossbill FileUploader: No server metadata, skipping cover upload")
-		return true, nil
-	end
-
-	if server_metadata.has_cover then
-		logger.dbg("Crossbill FileUploader: Server already has cover, skipping upload")
-		return true, nil
-	end
-
-	local tmp_path, cover_data, cover_image = book_metadata:extractCoverToFile(client_book_id)
-
-	if not cover_data then
-		logger.dbg("Crossbill FileUploader: No cover available for extraction")
-		return true, nil
-	end
-
-	local success, _, err = self.api_client:uploadCover(client_book_id, cover_data)
-
-	if cover_image then
-		cover_image:free()
-	end
-	if tmp_path then
-		os.remove(tmp_path)
-	end
-
-	if not success then
-		logger.warn("Crossbill FileUploader: Failed to upload cover:", err)
-		return false, err
-	end
-
-	return true, nil
 end
 
 --- Upload EPUB file for a book if server doesn't have one

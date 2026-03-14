@@ -2,7 +2,7 @@
 Crossbill Sync Plugin for KOReader
 
 A plugin to synchronize book highlights with a Crossbill server.
-Supports manual sync, auto-sync on suspend/exit, and cover image uploads.
+Supports manual sync, auto-sync on suspend/exit 
 ]]
 
 local WidgetContainer = require("ui/widget/container/widgetcontainer")

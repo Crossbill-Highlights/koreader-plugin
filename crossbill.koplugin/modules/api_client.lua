@@ -2,7 +2,7 @@
 API Client Module for Crossbill Sync
 
 Provides a clean interface for communicating with the Crossbill server API.
-Handles highlight uploads, cover image uploads, and other API operations.
+Handles highlight uploads, and other API operations.
 ]]
 
 local Network = require("modules/network")
@@ -72,7 +72,7 @@ end
 --- Get book metadata from server by client_book_id
 -- @param client_book_id string The client-side book ID (hash of title|author)
 -- @return number|nil HTTP status code
--- @return table|nil Response data containing book_id, bookname, author, has_cover, has_ebook
+-- @return table|nil Response data containing book_id, bookname, author, has_ebook
 -- @return string|nil Error message
 function ApiClient:getBookMetadata(client_book_id)
 	local token, auth_err = self.auth:getValidToken()
@@ -103,7 +103,7 @@ function ApiClient:getBookMetadata(client_book_id)
 end
 
 --- Create a new book on the server
--- @param book_data table Book metadata (title, author, isbn, cover, description, language, page_count, client_book_id, keywords)
+-- @param book_data table Book metadata (title, author, isbn, description, language, page_count, client_book_id, keywords)
 -- @return boolean Success status
 -- @return table|nil Response data containing book metadata (same as getBookMetadata)
 -- @return string|nil Error message
@@ -129,46 +129,6 @@ function ApiClient:createBook(book_data)
 	else
 		logger.err("Crossbill API: Create book failed with code:", code)
 		return false, nil, "Create book failed: " .. tostring(code)
-	end
-end
-
---- Upload a cover image for a book using client_book_id
--- @param client_book_id string The client-side book ID (hash of title|author)
--- @param cover_data string The cover image binary data
--- @return boolean Success status
--- @return nil Response data (always nil for this endpoint)
--- @return string|nil Error message
-function ApiClient:uploadCover(client_book_id, cover_data)
-	local token, auth_err = self.auth:getValidToken()
-	if not token then
-		return false, nil, auth_err or "Authentication failed"
-	end
-
-	local api_url = self:getApiUrl() .. "/ereader/books/" .. client_book_id .. "/cover"
-	logger.dbg("Crossbill API: Uploading cover to", api_url)
-
-	local files = {
-		{
-			name = "cover",
-			filename = "cover.jpg",
-			content_type = "image/jpeg",
-			data = cover_data,
-		},
-	}
-
-	local code, _, err = Network.postMultipart(api_url, files, token)
-
-	if not code then
-		logger.err("Crossbill API: Network error uploading cover:", err)
-		return false, nil, err or "Network error"
-	end
-
-	if code == 200 then
-		logger.info("Crossbill API: Cover uploaded successfully for book", client_book_id)
-		return true, nil, nil
-	else
-		logger.warn("Crossbill API: Cover upload failed with code:", code)
-		return false, nil, "Upload failed: " .. tostring(code)
 	end
 end
 

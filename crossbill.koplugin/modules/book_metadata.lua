@@ -6,7 +6,6 @@ Extracts book metadata from KOReader documents including:
 - ISBN from identifiers
 - Language, page count
 - Keywords/tags
-- Cover image
 ]]
 
 local DocSettings = require("docsettings")
@@ -142,58 +141,6 @@ function BookMetadata:extractBookData()
 		page_count = page_count,
 		keywords = keywords,
 	}
-end
-
---- Extract cover image from document
--- @return userdata|nil Cover image object (must be freed after use)
-function BookMetadata:extractCover()
-	if not self.ui.document then
-		logger.dbg("Crossbill Metadata: No document available for cover extraction")
-		return nil
-	end
-
-	local cover_image = FileManagerBookInfo:getCoverImage(self.ui.document)
-	if cover_image then
-		logger.dbg(
-			"Crossbill Metadata: Cover image extracted, size:",
-			cover_image:getWidth(),
-			"x",
-			cover_image:getHeight()
-		)
-	else
-		logger.dbg("Crossbill Metadata: No cover image available for this document")
-	end
-
-	return cover_image
-end
-
---- Save cover image to temporary file and return path and data
--- Caller is responsible for cleaning up the temp file and freeing the image
--- @return string|nil Temporary file path
--- @return string|nil Cover image data
--- @return userdata|nil Cover image object (caller must free)
-function BookMetadata:extractCoverToFile(book_id)
-	local cover_image = self:extractCover()
-	if not cover_image then
-		return nil, nil, nil
-	end
-
-	local tmp_path = "/tmp/crossbill_cover_" .. book_id .. ".jpg"
-	cover_image:writeToFile(tmp_path)
-	logger.dbg("Crossbill Metadata: Cover saved to temporary file:", tmp_path)
-
-	-- Read the file content
-	local cover_file = io.open(tmp_path, "rb")
-	if not cover_file then
-		logger.err("Crossbill Metadata: Failed to open temporary cover file")
-		cover_image:free()
-		return nil, nil, nil
-	end
-
-	local cover_data = cover_file:read("*all")
-	cover_file:close()
-
-	return tmp_path, cover_data, cover_image
 end
 
 --- Get document path

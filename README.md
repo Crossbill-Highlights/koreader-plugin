@@ -28,7 +28,7 @@ Syncs your KOReader highlights to your Crossbill server.
 ## Features
 
 - Syncs highlights from the currently open book
-- Uploads book cover and epub to the Crossbill
+- Uploads book epub to the Crossbill
 - Uploads reading session data to the Crossbill
 - Works with EPUB files
 
